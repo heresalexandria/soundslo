@@ -1,0 +1,63 @@
+name: Build check
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Native installer to build
+        type: choice
+        options: [mac-arm64, mac-x64, win-x64]
+        default: win-x64
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: package ${{ inputs.target }}
+    runs-on: >-
+      ${{ inputs.target == 'win-x64' && 'windows-2022'
+       || inputs.target == 'mac-x64' && 'macos-15-intel'
+       || 'macos-15' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - uses: actions/cache@v6
+        with:
+          path: .cache/package
+          key: desktop-${{ inputs.target }}-${{ hashFiles('scripts/package/**', 'pyproject.toml') }}
+      - name: Install Electron dependencies
+        working-directory: app
+        run: npm ci --no-audit --no-fund
+      - name: Package
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          PYTHONUTF8: '1'
+        run: python scripts/package/build.py --target "${{ inputs.target }}"
+      - name: Smoke test the packaged app
+        shell: bash
+        run: |
+          if [ "${{ inputs.target }}" = "win-x64" ]; then
+            exe=$(find app/dist -name 'Soundslo.exe' -path '*win-unpacked*' | head -1)
+          else
+            exe=$(find app/dist -path '*/Soundslo.app/Contents/MacOS/Soundslo' -type f | head -1)
+          fi
+          test -n "$exe"
+          "$exe" --smoke
+      - name: Collect installers
+        shell: bash
+        run: |
+          mkdir -p out-dist
+          find app/dist -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*setup.exe' \) -exec cp {} out-dist/ \;
+      - uses: actions/upload-artifact@v7
+        with:
+          name: build-check-${{ inputs.target }}
+          path: out-dist/*
+          retention-days: 3
+          if-no-files-found: error

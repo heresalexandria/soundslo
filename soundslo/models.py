@@ -4,6 +4,7 @@ import subprocess
 import threading
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Literal
 
 from soundslo.config import SA3_WEIGHTS_REVISION, Settings
@@ -29,6 +30,8 @@ class ModelSpec:
     supports_negative_prompt: bool
     weight_files: tuple[str, ...] = ()
     download_bytes: int | None = None
+    tflite_weight_files: tuple[str, ...] = ()
+    tflite_download_bytes: int | None = None
     dit: str | None = None
     decoder: str | None = None
     api_model: str | None = None
@@ -46,7 +49,7 @@ MODEL_SPECS = {
         name="Stable Audio 3 Small Music",
         short_name="Small Music",
         deployment="local",
-        description="Fast, lightweight music generation for lower-memory Apple Silicon Macs.",
+        description="Fast, lightweight music generation for lower-memory computers.",
         tradeoff=(
             "Uses much less disk and memory than Medium, but tops out at two minutes "
             "and has lower musical coherence."
@@ -63,6 +66,12 @@ MODEL_SPECS = {
             "models/mlx/same_s_decoder_f32.npz",
         ),
         download_bytes=1_704_727_702,
+        tflite_weight_files=(
+            "models/tflite/t5gemma/encoder_fp16.tflite",
+            "models/tflite/sa3-sm-music/dit_w16a32.tflite",
+            "models/tflite/same-s/dec_w16a32.tflite",
+        ),
+        tflite_download_bytes=1_597_003_984,
         dit="sm-music",
         decoder="same-s",
         official_url="https://huggingface.co/stabilityai/stable-audio-3-small",
@@ -91,6 +100,12 @@ MODEL_SPECS = {
             "models/mlx/same_l_decoder_f32.npz",
         ),
         download_bytes=5_179_055_990,
+        tflite_weight_files=(
+            "models/tflite/t5gemma/encoder_fp16.tflite",
+            "models/tflite/sa3-m/dit_w16a32.tflite",
+            "models/tflite/same-l/dec_w16a32.tflite",
+        ),
+        tflite_download_bytes=4_449_143_136,
         dit="medium",
         decoder="same-l",
         official_url="https://huggingface.co/stabilityai/stable-audio-3-medium",
@@ -105,7 +120,7 @@ MODEL_SPECS = {
             "its hosted API."
         ),
         tradeoff=(
-            "No public local weights: prompts leave this Mac, internet and an API key are "
+            "No public local weights: prompts leave this computer, internet and an API key are "
             "required, and each successful generation costs credits."
         ),
         parameter_label="2.7B",
@@ -129,8 +144,9 @@ def get_model(model_id: str) -> ModelSpec:
 
 
 def model_is_installed(settings: Settings, spec: ModelSpec) -> bool:
-    return bool(spec.weight_files) and all(
-        (settings.mlx_root / relative_path).is_file() for relative_path in spec.weight_files
+    files = weight_files_for(settings, spec)
+    return bool(files) and all(
+        (settings.backend_root / relative_path).is_file() for relative_path in files
     )
 
 
@@ -138,24 +154,28 @@ def model_is_ready(settings: Settings, spec: ModelSpec) -> bool:
     if spec.deployment == "cloud":
         return bool(settings.stability_api_key)
     return (
-        settings.sa3_executable.is_file()
-        and settings.runtime_python.is_file()
+        settings.runtime_installed
         and model_is_installed(settings, spec)
     )
 
 
 def model_catalog(settings: Settings) -> list[dict]:
-    runtime_installed = settings.sa3_executable.is_file() and settings.runtime_python.is_file()
+    runtime_installed = settings.runtime_installed
     catalog: list[dict] = []
     for spec in MODEL_SPECS.values():
         installed = model_is_installed(settings, spec) if spec.deployment == "local" else False
         details = asdict(spec)
+        details["weight_files"] = weight_files_for(settings, spec)
+        details["download_bytes"] = download_bytes_for(settings, spec)
+        details.pop("tflite_weight_files", None)
+        details.pop("tflite_download_bytes", None)
         details.update(
             {
                 "installed": installed,
                 "installed_bytes": _installed_bytes(settings, spec),
                 "ready": model_is_ready(settings, spec),
                 "runtime_installed": runtime_installed,
+                "runtime_backend": settings.runtime_backend,
                 "installable": spec.deployment == "local",
                 "configured": (
                     installed if spec.deployment == "local" else bool(settings.stability_api_key)
@@ -183,13 +203,25 @@ def model_catalog(settings: Settings) -> list[dict]:
 
 def _installed_bytes(settings: Settings, spec: ModelSpec) -> int:
     total = 0
-    for relative_path in spec.weight_files:
-        path = settings.mlx_root / relative_path
+    for relative_path in weight_files_for(settings, spec):
+        path = settings.backend_root / relative_path
         try:
             total += path.stat().st_size
         except OSError:
             continue
     return total
+
+
+def weight_files_for(settings: Settings, spec: ModelSpec) -> tuple[str, ...]:
+    if settings.runtime_backend == "tflite":
+        return spec.tflite_weight_files
+    return spec.weight_files
+
+
+def download_bytes_for(settings: Settings, spec: ModelSpec) -> int | None:
+    if settings.runtime_backend == "tflite":
+        return spec.tflite_download_bytes
+    return spec.download_bytes
 
 
 def _utc_now() -> str:
@@ -201,6 +233,18 @@ class ModelInstaller:
         self.settings = settings
         self._lock = threading.Lock()
         self._statuses: dict[str, dict] = {}
+        self._processes: dict[str, subprocess.Popen[str]] = {}
+
+    def stop(self) -> None:
+        with self._lock:
+            processes = list(self._processes.values())
+        for process in processes:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    process.kill()
 
     def status(self, model_id: str) -> dict:
         with self._lock:
@@ -219,8 +263,8 @@ class ModelInstaller:
                 "Stable Audio 3 Large is API-only and has no public Hugging Face weights "
                 "to install."
             )
-        if not self.settings.runtime_python.is_file():
-            raise RuntimeError("The MLX runtime is missing. Run ./scripts/setup.sh first.")
+        if not self.settings.runtime_installed:
+            raise RuntimeError("The local model runtime is missing. Run setup again.")
         with self._lock:
             current = self._statuses.get(model_id)
             if current and current["state"] == "installing":
@@ -244,12 +288,16 @@ class ModelInstaller:
     def _install(self, spec: ModelSpec) -> None:
         command = [
             str(self.settings.runtime_python),
-            str(self.settings.root / "scripts" / "prefetch_weights.py"),
-            str(self.settings.mlx_root),
+            str(Path(__file__).with_name("model_download.py")),
+            str(self.settings.backend_root),
             "--revision",
             SA3_WEIGHTS_REVISION,
             "--model",
             str(spec.dit),
+            "--backend",
+            self.settings.runtime_backend,
+            "--precision",
+            self.settings.tflite_precision,
         ]
         output: list[str] = []
         try:
@@ -261,9 +309,11 @@ class ModelInstaller:
                 text=True,
                 bufsize=1,
             )
+            with self._lock:
+                self._processes[spec.id] = process
             assert process.stdout is not None
             ready_count = 0
-            total = max(len(spec.weight_files), 1)
+            total = max(len(weight_files_for(self.settings, spec)), 1)
             for line in process.stdout:
                 clean = line.strip()
                 if not clean:
@@ -307,6 +357,9 @@ class ModelInstaller:
                 error=str(error),
                 finished_at=_utc_now(),
             )
+        finally:
+            with self._lock:
+                self._processes.pop(spec.id, None)
 
     def _update(self, model_id: str, **values: object) -> None:
         with self._lock:

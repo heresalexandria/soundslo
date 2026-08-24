@@ -1,0 +1,166 @@
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: bump version
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      tag: ${{ steps.bump.outputs.tag }}
+      sha: ${{ steps.push.outputs.sha }}
+      previous: ${{ steps.previous.outputs.tag }}
+      skip: ${{ steps.kind.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Select release kind
+        id: kind
+        env:
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          DISPATCH: ${{ inputs.bump }}
+        run: |
+          if [ -n "$DISPATCH" ]; then kind="$DISPATCH"; else kind="$(python3 scripts/release/select_bump.py)"; fi
+          echo "kind=$kind" >> "$GITHUB_OUTPUT"
+          if [ "$kind" = none ]; then echo 'skip=true' >> "$GITHUB_OUTPUT"; else echo 'skip=false' >> "$GITHUB_OUTPUT"; fi
+      - name: Find previous release
+        id: previous
+        if: steps.kind.outputs.skip != 'true'
+        run: echo "tag=$(git tag --list 'v*' --sort=-v:refname | head -1)" >> "$GITHUB_OUTPUT"
+      - name: Bump version
+        id: bump
+        if: steps.kind.outputs.skip != 'true'
+        run: python3 scripts/release/bump_version.py "${{ steps.kind.outputs.kind }}"
+      - name: Commit and push version
+        id: push
+        if: steps.kind.outputs.skip != 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add pyproject.toml soundslo/__init__.py app/package.json app/package-lock.json
+          git commit -m "Release ${{ steps.bump.outputs.tag }}"
+          git push origin HEAD:main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: build ${{ matrix.target }}
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: mac-arm64
+            runner: macos-15
+          - target: mac-x64
+            runner: macos-15-intel
+          - target: win-x64
+            runner: windows-2022
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - uses: actions/cache@v6
+        with:
+          path: .cache/package
+          key: desktop-${{ matrix.target }}-${{ hashFiles('scripts/package/**', 'pyproject.toml') }}
+      - name: Install Electron dependencies
+        working-directory: app
+        run: npm ci --no-audit --no-fund
+      - name: Package native app
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          PYTHONUTF8: '1'
+        run: python scripts/package/build.py --target "${{ matrix.target }}"
+      - name: Smoke test package
+        shell: bash
+        run: |
+          if [ "${{ matrix.target }}" = "win-x64" ]; then
+            exe=$(find app/dist -name 'Soundslo.exe' -path '*win-unpacked*' | head -1)
+          else
+            exe=$(find app/dist -path '*/Soundslo.app/Contents/MacOS/Soundslo' -type f | head -1)
+          fi
+          test -n "$exe"
+          "$exe" --smoke
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          mkdir -p out-dist
+          find app/dist -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*setup.exe' \) -exec cp {} out-dist/ \;
+      - uses: actions/upload-artifact@v7
+        with:
+          name: build-${{ matrix.target }}
+          path: out-dist/*
+          retention-days: 7
+          if-no-files-found: error
+
+  publish:
+    name: publish release
+    needs: [prepare, build]
+    if: always() && needs.prepare.result == 'success' && needs.build.result == 'success' && needs.prepare.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          path: incoming
+          pattern: build-*
+      - name: Gather, alias, and checksum
+        run: |
+          mkdir -p release
+          find incoming -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*setup.exe' \) -exec mv {} release/ \;
+          cp "release/Soundslo-${{ needs.prepare.outputs.version }}-mac-arm64.dmg" release/Soundslo-mac-arm64.dmg
+          cp "release/Soundslo-${{ needs.prepare.outputs.version }}-mac-x64.dmg" release/Soundslo-mac-x64.dmg
+          cp "release/Soundslo-${{ needs.prepare.outputs.version }}-win-x64-setup.exe" release/Soundslo-win-x64-setup.exe
+          cd release
+          sha256sum * > SHA256SUMS.txt
+      - name: Build release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -n "$PR" ]; then gh api "repos/${{ github.repository }}/pulls/$PR" > pr.json; fi
+          python3 scripts/release/release_notes.py ${PR:+--pr pr.json} --version "${{ needs.prepare.outputs.version }}" --previous "${{ needs.prepare.outputs.previous }}" --repo "${{ github.repository }}" --files release --output notes.md
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ needs.prepare.outputs.tag }}" --repo "${{ github.repository }}" --target "${{ needs.prepare.outputs.sha }}" --title "${{ needs.prepare.outputs.tag }}" --notes-file notes.md --latest release/*
+      - name: Move rolling latest tag
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -f latest "${{ needs.prepare.outputs.sha }}"
+          git push -f origin latest

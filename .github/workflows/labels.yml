@@ -1,0 +1,22 @@
+name: Create release labels
+
+on: workflow_dispatch
+
+permissions:
+  issues: write
+
+jobs:
+  labels:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          make_label() {
+            gh label create "$1" --repo "$REPO" --color "$2" --description "$3" 2>/dev/null || gh label edit "$1" --repo "$REPO" --color "$2" --description "$3"
+          }
+          make_label major B60205 'Breaking change'
+          make_label minor 0E8A16 'New feature'
+          make_label patch 1D76DB 'Fix or small change'
+          make_label no-release 5B45A8 'Merge without a release'

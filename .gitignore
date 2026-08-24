@@ -10,6 +10,10 @@ __pycache__/
 htmlcov/
 data/
 dist/
+.cache/
+app/build-resources/
+app/dist/
+app/node_modules/
 
 # Local identity setup: never commit
 AGENTS.md

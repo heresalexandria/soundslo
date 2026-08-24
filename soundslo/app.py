@@ -4,6 +4,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import sys
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -18,16 +19,16 @@ from soundslo import __version__
 from soundslo.config import SA3_REVISION, SA3_WEIGHTS_REVISION, Settings
 from soundslo.database import TERMINAL_STATUSES, Database
 from soundslo.generator import GenerationRunner, JobManager
-from soundslo.models import LARGE_API_ID, MEDIUM_ID, ModelInstaller, get_model, model_catalog
-
-DEFAULT_NEGATIVE_PROMPT = "vocals, singing, speech, spoken word, lyrics, choir"
-REQUIRED_WEIGHTS = (
-    "models/mlx/t5gemma_f16.npz",
-    "models/mlx/dit_medium_f16.npz",
-    "models/mlx/same_l_decoder_f32.npz",
+from soundslo.models import (
+    LARGE_API_ID,
+    MEDIUM_ID,
+    ModelInstaller,
+    get_model,
+    model_catalog,
+    weight_files_for,
 )
 
-
+DEFAULT_NEGATIVE_PROMPT = "vocals, singing, speech, spoken word, lyrics, choir"
 class GenerationCreate(BaseModel):
     prompt: str = Field(min_length=3, max_length=2000)
     name: str | None = Field(default=None, max_length=120)
@@ -97,6 +98,7 @@ def create_app(settings: Settings | None = None, *, start_jobs: bool = True) -> 
         yield
         if start_jobs:
             jobs.stop()
+        model_installer.stop()
 
     app = FastAPI(title="Soundslo", version=__version__, lifespan=lifespan)
     app.state.settings = settings
@@ -110,17 +112,19 @@ def create_app(settings: Settings | None = None, *, start_jobs: bool = True) -> 
 
     @app.get("/api/system")
     def system_status() -> dict:
-        usage = shutil.disk_usage(settings.root)
+        usage = shutil.disk_usage(settings.data_dir)
+        medium = get_model(MEDIUM_ID)
         weights = {
-            Path(relative).name: (settings.mlx_root / relative).exists()
-            for relative in REQUIRED_WEIGHTS
+            Path(relative).name: (settings.backend_root / relative).exists()
+            for relative in weight_files_for(settings, medium)
         }
         return {
             "app_version": __version__,
             "model": "Stable Audio 3 Medium",
             "model_revision": SA3_WEIGHTS_REVISION[:12],
             "runtime_revision": SA3_REVISION[:12],
-            "runtime_installed": runner.is_ready(),
+            "runtime_installed": settings.runtime_installed,
+            "runtime_backend": settings.runtime_backend,
             "weights_ready": all(weights.values()),
             "weights": weights,
             "ready": runner.is_ready() and all(weights.values()),
@@ -130,7 +134,7 @@ def create_app(settings: Settings | None = None, *, start_jobs: bool = True) -> 
 
     @app.get("/api/models")
     def list_models() -> dict:
-        usage = shutil.disk_usage(settings.root)
+        usage = shutil.disk_usage(settings.data_dir)
         models = model_catalog(settings)
         for model in models:
             model["installation"] = model_installer.status(model["id"])
@@ -251,9 +255,17 @@ def create_app(settings: Settings | None = None, *, start_jobs: bool = True) -> 
     def reveal_audio(generation_id: str) -> dict[str, bool]:
         generation = require_generation(database, generation_id)
         path = require_audio_path(settings, generation)
-        result = subprocess.run(["open", "-R", str(path)], check=False)
+        if sys.platform == "darwin":
+            command = ["open", "-R", str(path)]
+        elif sys.platform == "win32":
+            command = ["explorer.exe", f"/select,{path}"]
+        else:
+            command = ["xdg-open", str(path.parent)]
+        result = subprocess.run(command, check=False)
         if result.returncode != 0:
-            raise HTTPException(status_code=500, detail="Finder could not reveal this file.")
+            raise HTTPException(
+                status_code=500, detail="The file manager could not reveal this file."
+            )
         return {"revealed": True}
 
     @app.get("/api/generations/{generation_id}/log")

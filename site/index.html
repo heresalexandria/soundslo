@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0c0c0b">
+    <meta name="description" content="Download Soundslo for macOS or Windows and generate private Stable Audio 3 instrumental music on your computer.">
+    <link rel="canonical" href="https://heresalexandria.github.io/soundslo/">
+    <link rel="icon" href="img/icon.png" type="image/png">
+    <link rel="stylesheet" href="styles.css">
+
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Soundslo">
+    <meta property="og:title" content="Soundslo | Describe a world. Hear it take shape.">
+    <meta property="og:description" content="Private Stable Audio 3 music generation in a self-contained desktop app for macOS and Windows.">
+    <meta property="og:url" content="https://heresalexandria.github.io/soundslo/">
+    <meta property="og:image" content="https://heresalexandria.github.io/soundslo/img/app.jpg">
+    <meta property="og:image:alt" content="The Soundslo desktop music generation workbench.">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Soundslo | Private AI music generation">
+    <meta name="twitter:description" content="Download Soundslo for macOS or Windows.">
+    <meta name="twitter:image" content="https://heresalexandria.github.io/soundslo/img/app.jpg">
+    <title>Soundslo | Private AI music generation</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Soundslo",
+        "url": "https://heresalexandria.github.io/soundslo/",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "macOS, Windows",
+        "isAccessibleForFree": true,
+        "license": "https://opensource.org/license/mit",
+        "codeRepository": "https://github.com/heresalexandria/soundslo",
+        "description": "A local-first Stable Audio 3 music generation workbench."
+      }
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="Soundslo home">
+        <span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span>soundslo</span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="#downloads">Download</a>
+        <a href="#how">How it works</a>
+        <a href="https://github.com/heresalexandria/soundslo">Source</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="glow" aria-hidden="true"></div>
+        <div class="shell hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow"><span></span> Local model · private audio · no account</p>
+            <h1>Describe a world.<br><em>Hear it take shape.</em></h1>
+            <p class="lede">
+              Soundslo turns a written scene into an instrumental score with
+              Stable Audio 3 Medium—running on your own Mac or Windows PC.
+            </p>
+            <p class="detail">
+              The desktop app includes its own runtime, prepares the right engine
+              for your hardware, and downloads the pinned model on first launch.
+              Your local prompts, generations, and library stay on your computer.
+            </p>
+            <div class="hero-actions">
+              <a class="button primary" href="https://github.com/heresalexandria/soundslo/releases/latest/download/Soundslo-mac-arm64.dmg">
+                <span>Download for Mac</span><small>Apple silicon</small>
+              </a>
+              <a class="button" href="https://github.com/heresalexandria/soundslo/releases/latest/download/Soundslo-win-x64-setup.exe">
+                <span>Download for Windows</span><small>64-bit installer</small>
+              </a>
+            </div>
+            <p class="fine">Intel Mac? <a href="#downloads">Choose the Intel build below.</a></p>
+          </div>
+          <figure class="preview">
+            <div class="window-bar" aria-hidden="true"><span></span><span></span><span></span><b>soundslo</b></div>
+            <img src="img/app.jpg" width="2200" height="1375" alt="Soundslo showing a text music prompt, generation controls, and local audio library">
+          </figure>
+        </div>
+      </section>
+
+      <section class="strip" aria-label="Product facts">
+        <div class="shell fact-grid">
+          <div><b>6:20</b><span>maximum length</span></div>
+          <div><b>1.4B</b><span>Medium parameters</span></div>
+          <div><b>44.1 kHz</b><span>stereo WAV</span></div>
+          <div><b>0</b><span>uploads required</span></div>
+        </div>
+      </section>
+
+      <section class="section shell" id="downloads">
+        <div class="section-heading">
+          <p class="kicker">Latest release</p>
+          <h2>Choose the build for your computer.</h2>
+          <p>Each native installer is assembled and smoke-tested on its own operating system before release.</p>
+        </div>
+        <div class="download-grid">
+          <article class="download-card featured">
+            <p class="platform">macOS · recommended</p>
+            <h3>Apple silicon</h3>
+            <p>M-series Macs use the Metal-accelerated MLX engine and the approximately 5.2 GB Medium model.</p>
+            <a class="button primary" href="https://github.com/heresalexandria/soundslo/releases/latest/download/Soundslo-mac-arm64.dmg">Download DMG</a>
+          </article>
+          <article class="download-card">
+            <p class="platform">macOS</p>
+            <h3>Intel</h3>
+            <p>Intel Macs use the portable LiteRT CPU engine and an approximately 4.5 GB near-lossless Medium model.</p>
+            <a class="button" href="https://github.com/heresalexandria/soundslo/releases/latest/download/Soundslo-mac-x64.dmg">Download DMG</a>
+          </article>
+          <article class="download-card">
+            <p class="platform">Windows</p>
+            <h3>64-bit</h3>
+            <p>Windows 10 and 11 use the portable LiteRT CPU engine. Windows on ARM runs this build through emulation.</p>
+            <a class="button" href="https://github.com/heresalexandria/soundslo/releases/latest/download/Soundslo-win-x64-setup.exe">Download installer</a>
+          </article>
+        </div>
+        <aside class="first-launch">
+          <div>
+            <h3>First launch finishes the setup.</h3>
+            <p>
+              Leave at least 8 GB free and keep Soundslo open while Medium downloads.
+              Progress appears in Settings, failed downloads can be retried, and the
+              model cache survives app updates.
+            </p>
+          </div>
+          <a href="https://github.com/heresalexandria/soundslo/releases/latest">Release notes and checksums</a>
+        </aside>
+        <p class="unsigned-note">
+          Builds are currently unsigned. On macOS, Control-click Soundslo and choose
+          <strong>Open</strong>. On Windows, choose <strong>More info</strong>, then
+          <strong>Run anyway</strong>. Later updates install from inside Soundslo after checksum verification.
+        </p>
+      </section>
+
+      <section class="section dark" id="how">
+        <div class="shell">
+          <div class="section-heading">
+            <p class="kicker">A workbench, not a prompt box</p>
+            <h2>Compose, compare, keep the good takes.</h2>
+          </div>
+          <div class="feature-grid">
+            <article><span>01</span><h3>Write with detail</h3><p>Describe era, instrumentation, mood, tempo, structure, and what the music should leave room for.</p></article>
+            <article><span>02</span><h3>Control the render</h3><p>Set exact duration, seed, guidance, steps, and a negative prompt for reproducible variations.</p></article>
+            <article><span>03</span><h3>Build a local library</h3><p>Queue work, preview WAVs, rename takes, reuse prompts, inspect logs, and reveal finished files.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section shell open-source">
+        <p class="kicker">Open-source application</p>
+        <h2>The app is inspectable. The model has its own terms.</h2>
+        <p>
+          Soundslo is MIT licensed. Stable Audio 3 weights download separately under
+          the Stability AI Community License, and T5Gemma remains subject to the Gemma terms.
+        </p>
+        <div><a class="button primary" href="https://github.com/heresalexandria/soundslo">View source</a><a class="button" href="https://github.com/heresalexandria/soundslo#licensing">Read licensing notes</a></div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="shell footer-grid">
+        <div class="brand"><span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>soundslo</span></div>
+        <nav aria-label="Project links"><a href="https://github.com/heresalexandria/soundslo/releases">Releases</a><a href="https://github.com/heresalexandria/soundslo/blob/main/NOTICE">Notices</a><a href="https://github.com/heresalexandria/soundslo/blob/main/LICENSE">License</a></nav>
+      </div>
+    </footer>
+  </body>
+</html>

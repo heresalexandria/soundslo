@@ -4,15 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#10100f" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; media-src 'self' blob:; style-src 'self'; script-src 'self'; connect-src 'self'" />
     <title>Soundslo — Local music workbench</title>
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" sizes="any" />
     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
-    <script>
-      if (window.location.protocol === "file:") {
-        window.location.replace("http://127.0.0.1:8733/");
-      }
-    </script>
     <link rel="stylesheet" href="/static/styles.css" />
     <script src="/static/app.js" defer></script>
   </head>
@@ -23,17 +19,21 @@
         <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
         <span>soundslo</span>
       </a>
-      <div class="system-pill" id="system-pill">
-        <span class="status-dot"></span>
-        <span id="system-label">Checking local model…</span>
+      <div class="topbar-status">
+        <button class="update-chip" id="update-chip" type="button" hidden>Update available</button>
+        <button class="desktop-version" id="desktop-version" type="button" hidden></button>
+        <div class="system-pill" id="system-pill">
+          <span class="status-dot"></span>
+          <span id="system-label">Checking local model…</span>
+        </div>
       </div>
     </header>
 
     <main>
       <section class="hero">
-        <p class="eyebrow" id="model-eyebrow">STABLE AUDIO 3 MEDIUM · ON YOUR MAC</p>
+        <p class="eyebrow" id="model-eyebrow">STABLE AUDIO 3 MEDIUM · ON YOUR COMPUTER</p>
         <h1>Describe a world.<br /><em>Hear it take shape.</em></h1>
-        <p class="lede" id="model-lede">Instrumental scores generated privately on Apple Silicon.</p>
+        <p class="lede" id="model-lede">Instrumental scores generated privately on your computer.</p>
         <p class="model-attribution">Powered by Stability AI</p>
       </section>
 
@@ -59,7 +59,7 @@
             <p>
               Medium is the largest model with public local weights. Stability AI distributes
               Large only through its hosted API or enterprise self-hosting, so there is no
-              Hugging Face download to install on this Mac.
+              Hugging Face download to install on this computer.
             </p>
           </div>
         </div>
@@ -138,7 +138,7 @@
           </details>
 
           <div class="submit-row">
-            <div class="privacy-note" id="privacy-note"><span>⌁</span> Audio never leaves this Mac</div>
+            <div class="privacy-note" id="privacy-note"><span>⌁</span> Audio never leaves this computer</div>
             <button class="primary-button" id="generate-button" type="submit">
               <span>Generate music</span><i aria-hidden="true">→</i>
             </button>
@@ -184,6 +184,21 @@
         <h2>Generation details</h2>
         <pre id="log-output"></pre>
         <div class="dialog-actions"><button class="primary-button compact" data-close-dialog>Close</button></div>
+      </div>
+    </dialog>
+
+    <dialog id="update-dialog" class="update-dialog">
+      <div>
+        <p class="section-number">SOUNDSLO DESKTOP</p>
+        <h2 id="update-title">Software update</h2>
+        <p class="update-status" id="update-status">Checking GitHub Releases…</p>
+        <div class="progress-track update-progress" id="update-progress" hidden>
+          <div class="progress-fill" id="update-progress-fill"></div>
+        </div>
+        <div class="dialog-actions">
+          <button class="ghost-button" type="button" id="update-close">Close</button>
+          <button class="primary-button compact" type="button" id="update-action">Check for updates</button>
+        </div>
       </div>
     </dialog>
 

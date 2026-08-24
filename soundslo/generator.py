@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import pty
 import queue
 import re
 import select
@@ -13,6 +12,11 @@ from collections.abc import Callable
 from pathlib import Path
 
 import httpx
+
+try:
+    import pty
+except ImportError:  # pragma: no cover - exercised by packaged Windows smoke tests
+    pty = None
 
 from soundslo.config import Settings
 from soundslo.database import TERMINAL_STATUSES, Database
@@ -35,6 +39,7 @@ class GenerationRunner:
         if spec.deployment != "local" or not spec.dit or not spec.decoder:
             raise ValueError(f"{spec.name} does not use the local MLX command.")
         command = [
+            str(self.settings.runtime_python),
             str(self.settings.sa3_executable),
             "--prompt",
             generation["prompt"],
@@ -44,8 +49,6 @@ class GenerationRunner:
             spec.dit,
             "--decoder",
             spec.decoder,
-            "--dit-dtype",
-            "fp16",
             "--seconds",
             str(generation["duration_seconds"]),
             "--steps",
@@ -59,6 +62,13 @@ class GenerationRunner:
             "--out",
             str(output_path),
         ]
+        if self.settings.runtime_backend == "mlx":
+            command[command.index("--seconds"):command.index("--seconds")] = [
+                "--dit-dtype",
+                "fp16",
+            ]
+        else:
+            command.extend(["--precision", self.settings.tflite_precision])
         return command
 
     def run(
@@ -99,6 +109,11 @@ class GenerationRunner:
         on_process: Callable[[subprocess.Popen[bytes] | None], None],
     ) -> tuple[int, str]:
 
+        if pty is None:
+            return self._run_local_pipes(
+                generation, output_path, on_output, on_progress, on_process
+            )
+
         master_fd, slave_fd = pty.openpty()
         process: subprocess.Popen[bytes] | None = None
         captured: list[str] = []
@@ -106,7 +121,7 @@ class GenerationRunner:
         try:
             process = subprocess.Popen(
                 self.command_for(generation, output_path),
-                cwd=self.settings.mlx_root,
+                cwd=self.settings.backend_root,
                 stdin=subprocess.DEVNULL,
                 stdout=slave_fd,
                 stderr=slave_fd,
@@ -155,6 +170,46 @@ class GenerationRunner:
             if slave_fd >= 0:
                 os.close(slave_fd)
             os.close(master_fd)
+
+    def _run_local_pipes(
+        self,
+        generation: dict,
+        output_path: Path,
+        on_output: Callable[[str], None],
+        on_progress: Callable[[float, str], None],
+        on_process: Callable[[subprocess.Popen[bytes] | None], None],
+    ) -> tuple[int, str]:
+        captured: list[str] = []
+        process: subprocess.Popen | None = None
+        creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        try:
+            process = subprocess.Popen(
+                self.command_for(generation, output_path),
+                cwd=self.settings.backend_root,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
+                creationflags=creationflags,
+                env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            )
+            on_process(process)
+            assert process.stdout is not None
+            for line in process.stdout:
+                clean = ANSI_RE.sub("", line).strip()
+                if not clean:
+                    continue
+                captured.append(clean)
+                on_output(clean)
+                progress = progress_from_line(clean)
+                if progress:
+                    on_progress(*progress)
+            return process.wait(), "\n".join(captured)[-MAX_LOG_CHARS:]
+        finally:
+            on_process(None)
 
     def _run_stability_api(
         self,
@@ -212,7 +267,7 @@ class GenerationRunner:
                     if result.status_code == 200:
                         output_path.parent.mkdir(parents=True, exist_ok=True)
                         output_path.write_bytes(result.content)
-                        on_output("Stable Audio 3 Large WAV downloaded to this Mac.")
+                        on_output("Stable Audio 3 Large WAV downloaded to this computer.")
                         on_progress(99, "Saving the WAV file")
                         return 0, "Stable Audio 3 Large generation completed."
                     if result.status_code != 202:
@@ -413,6 +468,14 @@ class JobManager:
 
 
 def _terminate_process(process: subprocess.Popen[bytes]) -> None:
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return
     try:
         os.killpg(process.pid, signal.SIGTERM)
         process.wait(timeout=3)
