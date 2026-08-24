@@ -53,7 +53,9 @@
       "target": ["dmg", "zip"],
       "icon": "build/icon.png",
       "darkModeSupport": true,
-      "identity": null,
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "signIgnore": ["\\.py[co]$"],
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist"
     },

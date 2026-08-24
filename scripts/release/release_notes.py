@@ -45,8 +45,9 @@ def main() -> int:
         *rows,
         "",
         "Soundslo checks GitHub Releases automatically and verifies downloaded updates against "
-        "`SHA256SUMS.txt` before installation. The apps are currently unsigned, so the first "
-        "browser download may show the standard macOS Gatekeeper or Windows SmartScreen warning.",
+        "`SHA256SUMS.txt` before installation. The macOS app is Developer ID signed, notarized, "
+        "and stapled. Windows is currently unsigned, so its first browser download may show the "
+        "standard SmartScreen warning.",
     ]
     if args.previous:
         notes.extend([

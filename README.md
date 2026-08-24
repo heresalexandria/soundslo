@@ -38,8 +38,9 @@ is approximately 5.2 GB. Windows uses the approximately 4.5 GB, near-lossless `w
 bundle. Generated WAVs use roughly 10 MB per minute. Intel Macs are not supported because the
 official LiteRT runtime does not publish a macOS x64 build.
 
-The current downloads are unsigned. On macOS, Control-click the app and choose **Open**. On
-Windows, choose **More info**, then **Run anyway** in the SmartScreen prompt.
+The macOS download is Developer ID signed, notarized by Apple, and stapled for offline Gatekeeper
+verification. Windows is currently unsigned; choose **More info**, then **Run anyway** if
+SmartScreen prompts.
 
 ## What it includes
 

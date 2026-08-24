@@ -1,5 +1,7 @@
+import json
 from pathlib import Path
 
+from scripts.package.build import package_environment
 from scripts.package.targets import TARGETS
 from scripts.release.bump_version import check
 from soundslo import __version__
@@ -75,3 +77,34 @@ def test_native_release_targets_match_supported_downloads() -> None:
 
 def test_every_release_version_source_agrees() -> None:
     assert check() == __version__
+
+
+def test_macos_release_requires_signing_while_local_and_windows_builds_do_not() -> None:
+    unsigned = package_environment("mac-arm64", notarize=False, source={})
+    assert unsigned["CSC_IDENTITY_AUTO_DISCOVERY"] == "false"
+    assert "SOUNDSLO_ELECTRON_SIGN" not in unsigned
+
+    local_notarized = package_environment("mac-arm64", notarize=True, source={})
+    assert local_notarized["SOUNDSLO_ELECTRON_SIGN"] == "true"
+    assert local_notarized["APPLE_KEYCHAIN_PROFILE"] == "clawnsole-notarization"
+    assert "CSC_IDENTITY_AUTO_DISCOVERY" not in local_notarized
+
+    signed = package_environment(
+        "mac-arm64",
+        notarize=True,
+        source={"CSC_LINK": "base64-certificate", "APPLE_ID": "developer@example.com"},
+    )
+    assert signed["SOUNDSLO_ELECTRON_SIGN"] == "true"
+    assert signed["CSC_LINK"] == "base64-certificate"
+    assert "APPLE_KEYCHAIN_PROFILE" not in signed
+
+    windows = package_environment(
+        "win-x64", notarize=False, source={"CSC_LINK": "mac-certificate"}
+    )
+    assert windows["CSC_IDENTITY_AUTO_DISCOVERY"] == "false"
+    assert "CSC_LINK" not in windows
+
+    package = json.loads((ROOT / "app" / "package.json").read_text())
+    assert package["build"]["mac"]["hardenedRuntime"] is True
+    assert package["build"]["mac"]["signIgnore"] == [r"\.py[co]$"]
+    assert "identity" not in package["build"]["mac"]

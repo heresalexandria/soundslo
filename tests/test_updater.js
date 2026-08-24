@@ -23,5 +23,6 @@ assert.strictEqual(updater.checksumFor(`${digest}  ${assets[0].name}\n`, assets[
 assert.strictEqual(updater.allowedUrl('https://api.github.com/repos/x/y'), true);
 assert.strictEqual(updater.allowedUrl('http://api.github.com/repos/x/y'), false);
 assert.strictEqual(updater.allowedUrl('https://example.com/update.zip'), false);
+assert.strictEqual(updater.EXPECTED_MAC_TEAM_ID, 'KMZ785G889');
 
 console.log('updater helpers: PASS');
