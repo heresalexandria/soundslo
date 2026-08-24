@@ -35,11 +35,40 @@ def test_medium_command_is_reproducible(tmp_path: Path) -> None:
         },
         tmp_path / "out.wav",
     )
-    assert command[0] == str(settings.sa3_executable)
+    assert command[0] == str(settings.runtime_python)
+    assert command[1] == str(settings.sa3_executable)
     assert command[command.index("--dit") + 1] == "medium"
     assert command[command.index("--decoder") + 1] == "same-l"
     assert command[command.index("--seed") + 1] == "42"
     assert command[command.index("--out") + 1] == str(tmp_path / "out.wav")
+
+
+def test_tflite_command_uses_portable_precision(tmp_path: Path) -> None:
+    python = tmp_path / "python.exe"
+    settings = Settings(
+        root=tmp_path,
+        data_dir=tmp_path / "data",
+        database_path=tmp_path / "data" / "db.sqlite3",
+        generations_dir=tmp_path / "data" / "generations",
+        sa3_root=tmp_path / "stable-audio-3",
+        static_dir=tmp_path / "static",
+        runtime_backend="tflite",
+        runtime_python_path=python,
+    )
+    command = GenerationRunner(settings).command_for(
+        {
+            "prompt": "cinematic instrumental",
+            "negative_prompt": "vocals",
+            "duration_seconds": 30,
+            "steps": 8,
+            "seed": 42,
+            "cfg_scale": 3,
+        },
+        tmp_path / "portable.wav",
+    )
+    assert command[:2] == [str(python), str(settings.sa3_executable)]
+    assert command[command.index("--precision") + 1] == "w16a32"
+    assert "--dit-dtype" not in command
 
 
 def test_small_music_command_uses_matching_dit_and_decoder(tmp_path: Path) -> None:

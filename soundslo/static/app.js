@@ -1,4 +1,8 @@
 const MEDIUM_MODEL_ID = "stable-audio-3-medium";
+const UPDATE_POLL_INTERVAL_MS = 6 * 60 * 60 * 1000;
+if (window.location.protocol === "file:") {
+  window.location.replace("http://127.0.0.1:8733/");
+}
 const FALLBACK_MODEL_NAMES = {
   "stable-audio-3-small-music": "Small Music",
   "stable-audio-3-medium": "Medium",
@@ -116,12 +120,20 @@ function applySelectedModel(system = null) {
     $("#privacy-note").innerHTML = `<span>↗</span> Prompt sent to Stability AI · ${model.credits_per_generation} credits`;
   } else {
     const freeDisk = state.modelData?.free_disk_bytes || system?.free_disk_bytes;
+    const installation = model.installation || {};
     $("#system-label").textContent = model.ready
       ? `${model.short_name} ready · ${formatBytes(freeDisk)} free`
-      : `${model.short_name} not installed · open Settings`;
-    $("#model-eyebrow").textContent = `STABLE AUDIO 3 ${model.short_name.toUpperCase()} · ON YOUR MAC`;
-    $("#model-lede").textContent = "Instrumental scores generated privately on Apple Silicon.";
-    $("#privacy-note").innerHTML = "<span>⌁</span> Audio never leaves this Mac";
+      : installation.state === "installing"
+        ? `Downloading ${model.short_name} · ${Math.round(installation.progress || 0)}%`
+        : installation.state === "failed"
+          ? `${model.short_name} setup failed · open Settings`
+          : `${model.short_name} not installed · open Settings`;
+    if (installation.state === "installing" && window.soundsloDesktop) {
+      $("#settings-panel").open = true;
+    }
+    $("#model-eyebrow").textContent = `STABLE AUDIO 3 ${model.short_name.toUpperCase()} · ON YOUR COMPUTER`;
+    $("#model-lede").textContent = "Instrumental scores generated privately on your computer.";
+    $("#privacy-note").innerHTML = "<span>⌁</span> Audio never leaves this computer";
   }
   pill.title = model.tradeoff;
   $("#settings-model-name").textContent = model.name;
@@ -191,7 +203,7 @@ function modelCard(model) {
   addFact(
     facts,
     model.deployment === "local" ? "Runs" : "Cost",
-    model.deployment === "local" ? "On this Mac" : `${model.credits_per_generation} credits / gen`,
+    model.deployment === "local" ? "On this computer" : `${model.credits_per_generation} credits / gen`,
   );
 
   const tradeoff = document.createElement("p");
@@ -301,6 +313,104 @@ function scheduleModelPolling() {
   const active = state.models.some((model) => model.installation?.state === "installing");
   if (active) state.modelPollTimer = setTimeout(() => loadSystem({ quiet: true }), 1000);
 }
+
+let desktopUpdate = null;
+let updateBusy = false;
+
+async function initDesktop() {
+  const desktop = window.soundsloDesktop;
+  if (!desktop) return;
+  document.body.classList.add("desktop", `desktop-${desktop.platform}`);
+  const version = $("#desktop-version");
+  version.hidden = false;
+  version.textContent = `v${desktop.version}`;
+  if (desktop.smoke) return;
+  desktop.onUpdateProgress(({ fraction = 0 }) => {
+    $("#update-progress").hidden = false;
+    $("#update-progress-fill").style.width = `${Math.max(0, Math.min(1, fraction)) * 100}%`;
+    $("#update-status").textContent = `Downloading update… ${Math.round(fraction * 100)}%`;
+  });
+  const info = await desktop.updateInfo();
+  window.setInterval(() => checkDesktopUpdate(false).catch(() => {}), UPDATE_POLL_INTERVAL_MS);
+  if (info.staged) {
+    desktopUpdate = { staged: info.staged };
+    showUpdateChip(`Install v${info.staged.version}`);
+    return;
+  }
+  if (info.stale) await checkDesktopUpdate(false);
+}
+
+function showUpdateChip(label) {
+  const chip = $("#update-chip");
+  chip.textContent = label;
+  chip.hidden = false;
+}
+
+async function checkDesktopUpdate(force = true) {
+  const result = await window.soundsloDesktop.updateCheck({ force });
+  desktopUpdate = result;
+  if (result.ok && result.available) showUpdateChip(`Update to v${result.latest}`);
+  return result;
+}
+
+function renderUpdateDialog() {
+  const status = $("#update-status");
+  const action = $("#update-action");
+  $("#update-progress").hidden = true;
+  action.disabled = updateBusy;
+  if (desktopUpdate?.staged) {
+    status.textContent = `Version ${desktopUpdate.staged.version} is downloaded and checksum-verified.`;
+    action.textContent = "Install and restart";
+  } else if (desktopUpdate?.ok && desktopUpdate.available) {
+    const size = desktopUpdate.asset?.size ? ` (${formatBytes(desktopUpdate.asset.size)})` : "";
+    status.textContent = `Version ${desktopUpdate.latest} is ready to download${size}.`;
+    action.textContent = "Download update";
+  } else if (desktopUpdate?.ok) {
+    status.textContent = `Soundslo ${desktopUpdate.current} is the latest version.`;
+    action.textContent = "Check again";
+  } else if (desktopUpdate?.error) {
+    status.textContent = desktopUpdate.error;
+    action.textContent = "Try again";
+  } else {
+    status.textContent = "Check GitHub Releases for a newer version.";
+    action.textContent = "Check for updates";
+  }
+}
+
+function openUpdateDialog() {
+  renderUpdateDialog();
+  $("#update-dialog").showModal();
+}
+
+$("#update-chip").addEventListener("click", openUpdateDialog);
+$("#desktop-version").addEventListener("click", openUpdateDialog);
+$("#update-close").addEventListener("click", () => $("#update-dialog").close());
+
+$("#update-action").addEventListener("click", async () => {
+  if (updateBusy || !window.soundsloDesktop) return;
+  updateBusy = true;
+  $("#update-action").disabled = true;
+  try {
+    if (desktopUpdate?.staged) {
+      $("#update-status").textContent = "Installing the verified update…";
+      await window.soundsloDesktop.updateInstall();
+      return;
+    }
+    if (desktopUpdate?.ok && desktopUpdate.available) {
+      const staged = await window.soundsloDesktop.updateDownload();
+      desktopUpdate = { staged };
+      showUpdateChip(`Install v${staged.version}`);
+    } else {
+      $("#update-status").textContent = "Checking GitHub Releases…";
+      desktopUpdate = await checkDesktopUpdate(true);
+    }
+  } catch (error) {
+    desktopUpdate = { error: error.message };
+  } finally {
+    updateBusy = false;
+    renderUpdateDialog();
+  }
+});
 
 async function loadGenerations({ quiet = false } = {}) {
   try {
@@ -423,7 +533,7 @@ function generationCard(generation) {
   addAction(actions, "Prompt", "reuse", generation.id, "Load these settings into the composer");
   if (generation.status === "completed") {
     addLink(actions, "Download", `/api/generations/${generation.id}/download`);
-    addAction(actions, "Finder", "reveal", generation.id, "Reveal WAV in Finder");
+    addAction(actions, "Show file", "reveal", generation.id, "Reveal WAV in the file manager");
   }
   if (["queued", "running"].includes(generation.status)) {
     addAction(actions, "Cancel", "cancel", generation.id);
@@ -704,3 +814,4 @@ function toast(message, error = false) {
 setDuration(30);
 updateControls();
 Promise.all([loadSystem(), loadGenerations()]);
+initDesktop();

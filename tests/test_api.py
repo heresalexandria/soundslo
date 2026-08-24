@@ -123,6 +123,32 @@ def test_model_catalog_is_transparent_without_exposing_credentials(tmp_path: Pat
         assert csrf_style_install.status_code == 415
 
 
+def test_tflite_catalog_reports_the_portable_medium_bundle(tmp_path: Path) -> None:
+    static_dir = Path(__file__).parents[1] / "soundslo" / "static"
+    runtime_python = tmp_path / "python.exe"
+    runtime_python.touch()
+    settings = Settings(
+        root=tmp_path,
+        data_dir=tmp_path / "data",
+        database_path=tmp_path / "data" / "soundslo.sqlite3",
+        generations_dir=tmp_path / "data" / "generations",
+        sa3_root=tmp_path / "runtime",
+        static_dir=static_dir,
+        runtime_backend="tflite",
+        runtime_python_path=runtime_python,
+    )
+    settings.sa3_executable.parent.mkdir(parents=True)
+    settings.sa3_executable.touch()
+    app = create_app(settings, start_jobs=False)
+    with TestClient(app) as client:
+        models = {model["id"]: model for model in client.get("/api/models").json()["models"]}
+    medium = models[MEDIUM_ID]
+    assert medium["runtime_backend"] == "tflite"
+    assert medium["runtime_installed"] is True
+    assert medium["download_bytes"] == 4_449_143_136
+    assert medium["weight_files"][-1].endswith("dec_w16a32.tflite")
+
+
 def test_generation_obeys_selected_model_limits(tmp_path: Path) -> None:
     static_dir = Path(__file__).parents[1] / "soundslo" / "static"
     settings = Settings(

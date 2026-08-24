@@ -18,6 +18,15 @@ def test_release_contains_required_license_and_notice_files() -> None:
         ROOT / "soundslo" / "static" / "soundslo-icon.svg",
         ROOT / "scripts" / "install_model.sh",
         ROOT / "scripts" / "run_with_large.sh",
+        ROOT / "app" / "main.js",
+        ROOT / "app" / "preload.js",
+        ROOT / "app" / "updater.js",
+        ROOT / "app" / "package.json",
+        ROOT / "app" / "package-lock.json",
+        ROOT / "site" / "index.html",
+        ROOT / "site" / "styles.css",
+        ROOT / ".github" / "workflows" / "release.yml",
+        ROOT / ".github" / "workflows" / "pages.yml",
     )
     assert all(path.is_file() and path.stat().st_size > 0 for path in required)
 
@@ -42,6 +51,7 @@ def test_readme_starts_with_branding_and_has_a_one_command_setup() -> None:
     assert 'src="soundslo/static/soundslo-icon.svg"' in readme
     assert "<p><em>Generate private," in readme
     assert 'src="docs/assets/soundslo-app.jpg"' in readme
+    assert "Download for macOS or Windows" in readme
     assert "bash scripts/setup.sh && bash scripts/run.sh" in readme
-    assert "lists Large as API-only" in readme
+    assert "Stable Audio 3 Large has no public local weights" in readme
     assert "bash scripts/install_model.sh small-music" in readme

@@ -1,0 +1,80 @@
+name: PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  release-label:
+    name: release label
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Require one release label
+        env:
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: python3 scripts/release/select_bump.py
+
+  test:
+    name: Python, renderer, and updater tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Install Python dependencies
+        run: python -m pip install uv && uv sync --dev
+      - name: Install Electron dependencies
+        working-directory: app
+        run: npm ci --no-audit --no-fund
+      - name: Version files agree
+        run: uv run python scripts/release/bump_version.py --check
+      - name: Lint
+        run: uv run ruff check .
+      - name: Python tests
+        run: uv run pytest
+      - name: Updater tests
+        run: node tests/test_updater.js
+      - name: JavaScript syntax
+        run: |
+          node --check app/main.js
+          node --check app/preload.js
+          node --check app/updater.js
+          node --check soundslo/static/app.js
+
+  smoke:
+    name: Electron smoke test
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Install app dependencies
+        run: |
+          python -m pip install uv
+          uv sync --dev
+          cd app
+          npm ci --no-audit --no-fund
+      - name: Fetch the pinned Stable Audio runtime
+        run: |
+          mkdir -p .runtime
+          curl -LsSf "https://github.com/Stability-AI/stable-audio-3/archive/a0b57f5483c4588f827f3552b7d5c6ca2a9687be.tar.gz" | tar -xz -C .runtime
+          mv .runtime/stable-audio-3-* .runtime/stable-audio-3
+      - name: Boot the real Electron main process
+        working-directory: app
+        run: npm run smoke

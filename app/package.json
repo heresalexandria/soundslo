@@ -1,0 +1,75 @@
+{
+  "name": "soundslo-app",
+  "version": "0.1.0",
+  "description": "Soundslo — private Stable Audio music generation",
+  "author": "Soundslo",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke",
+    "pack:mac": "python3 ../scripts/package/build.py --target mac-arm64",
+    "pack:mac-x64": "python3 ../scripts/package/build.py --target mac-x64",
+    "pack:win": "python3 ../scripts/package/build.py --target win-x64"
+  },
+  "devDependencies": {
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.soundslo.app",
+    "productName": "Soundslo",
+    "copyright": "Soundslo. Stable Audio model files download separately under the Stability AI Community License.",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "afterPack": "./build/after-pack.js",
+    "files": [
+      "main.js",
+      "preload.js",
+      "updater.js",
+      "package.json",
+      "!**/.DS_Store"
+    ],
+    "extraResources": [
+      {
+        "from": "build-resources/pyruntime",
+        "to": "pyruntime"
+      },
+      {
+        "from": "build-resources/sa3-runtime",
+        "to": "sa3-runtime"
+      },
+      {
+        "from": "build-resources/legal",
+        "to": "legal"
+      }
+    ],
+    "asar": true,
+    "compression": "normal",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "mac": {
+      "category": "public.app-category.music",
+      "target": ["dmg", "zip"],
+      "icon": "build/icon.png",
+      "darkModeSupport": true,
+      "identity": null,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
+    },
+    "dmg": {
+      "title": "${productName}"
+    },
+    "win": {
+      "target": ["nsis"],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "artifactName": "${productName}-${version}-win-x64-setup.${ext}"
+    }
+  }
+}
