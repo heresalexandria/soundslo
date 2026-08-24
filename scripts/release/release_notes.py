@@ -9,7 +9,6 @@ from pathlib import Path
 
 PLATFORMS = (
     ("-mac-arm64.dmg", "macOS, Apple silicon"),
-    ("-mac-x64.dmg", "macOS, Intel"),
     ("-win-x64-setup.exe", "Windows 10/11, 64-bit"),
 )
 

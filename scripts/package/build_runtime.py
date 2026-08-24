@@ -10,7 +10,7 @@ from pathlib import Path
 from .common import CACHE_DIR, REPO_ROOT, RUNTIME_CACHE, download, extract, human, log, rmtree, run
 from .targets import PBS_RELEASE, PBS_URL, PY_VERSION, Target, host_target
 
-RECIPE = 1
+RECIPE = 2
 
 
 def project_wheel(builder: Path) -> Path:
@@ -88,7 +88,18 @@ def build(target: Target, *, force: bool = False) -> Path:
         "--force-reinstall",
         wheel,
     ])
-    run([python, "-m", "compileall", "-q", "--invalidation-mode", "unchecked-hash", root])
+    site_packages = root / target.site_packages_rel
+    if not site_packages.is_dir():
+        raise SystemExit(f"bundled runtime has no site-packages at {site_packages}")
+    run([
+        python,
+        "-m",
+        "compileall",
+        "-q",
+        "--invalidation-mode",
+        "unchecked-hash",
+        site_packages,
+    ])
     stamp.write_text(json.dumps(wanted, indent=2))
     return root
 

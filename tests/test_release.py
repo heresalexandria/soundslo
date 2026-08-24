@@ -1,5 +1,8 @@
 from pathlib import Path
 
+from scripts.package.targets import TARGETS
+from scripts.release.bump_version import check
+from soundslo import __version__
 from soundslo.config import SA3_REVISION, SA3_WEIGHTS_REVISION
 
 ROOT = Path(__file__).parents[1]
@@ -55,3 +58,20 @@ def test_readme_starts_with_branding_and_has_a_one_command_setup() -> None:
     assert "bash scripts/setup.sh && bash scripts/run.sh" in readme
     assert "Stable Audio 3 Large has no public local weights" in readme
     assert "bash scripts/install_model.sh small-music" in readme
+
+
+def test_native_release_targets_match_supported_downloads() -> None:
+    assert tuple(TARGETS) == ("mac-arm64", "win-x64")
+    assert TARGETS["mac-arm64"].site_packages_rel == "lib/python3.12/site-packages"
+    assert TARGETS["win-x64"].site_packages_rel == "Lib/site-packages"
+
+    release_workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+    download_page = (ROOT / "site" / "index.html").read_text()
+    assert "mac-x64" not in release_workflow
+    assert "mac-x64" not in download_page
+    assert "Soundslo-mac-arm64.dmg" in download_page
+    assert "Soundslo-win-x64-setup.exe" in download_page
+
+
+def test_every_release_version_source_agrees() -> None:
+    assert check() == __version__

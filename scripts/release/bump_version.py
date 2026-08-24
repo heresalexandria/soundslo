@@ -14,6 +14,8 @@ PYPROJECT = ROOT / "pyproject.toml"
 INIT = ROOT / "soundslo" / "__init__.py"
 PACKAGE = ROOT / "app" / "package.json"
 LOCK = ROOT / "app" / "package-lock.json"
+UV_LOCK = ROOT / "uv.lock"
+UV_LOCK_PATTERN = r'(\[\[package\]\]\nname = "soundslo"\nversion = )"([^"]+)"'
 
 
 def current() -> str:
@@ -36,10 +38,12 @@ def check() -> str:
     init_match = re.search(r'^__version__\s*=\s*"([^"]+)"', INIT.read_text(), re.MULTILINE)
     init = init_match.group(1) if init_match else None
     lock = json.loads(LOCK.read_text()).get("version")
-    if len({version, init, package, lock}) != 1:
+    uv_match = re.search(UV_LOCK_PATTERN, UV_LOCK.read_text())
+    uv_lock = uv_match.group(2) if uv_match else None
+    if len({version, init, package, lock, uv_lock}) != 1:
         raise SystemExit(
             f"version mismatch: pyproject={version}, __init__={init}, "
-            f"package={package}, lock={lock}"
+            f"package={package}, lock={lock}, uv.lock={uv_lock}"
         )
     return version
 
@@ -59,6 +63,7 @@ def write(version: str) -> None:
     payload["version"] = version
     payload["packages"][""]["version"] = version
     LOCK.write_text(json.dumps(payload, indent=2) + "\n")
+    replace(UV_LOCK, UV_LOCK_PATTERN, rf'\g<1>"{version}"')
 
 
 def main() -> int:

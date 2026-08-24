@@ -58,7 +58,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add pyproject.toml soundslo/__init__.py app/package.json app/package-lock.json
+          git add pyproject.toml uv.lock soundslo/__init__.py app/package.json app/package-lock.json
           git commit -m "Release ${{ steps.bump.outputs.tag }}"
           git push origin HEAD:main
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -73,8 +73,6 @@ jobs:
         include:
           - target: mac-arm64
             runner: macos-15
-          - target: mac-x64
-            runner: macos-15-intel
           - target: win-x64
             runner: windows-2022
     runs-on: ${{ matrix.runner }}
@@ -142,7 +140,6 @@ jobs:
           mkdir -p release
           find incoming -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*setup.exe' \) -exec mv {} release/ \;
           cp "release/Soundslo-${{ needs.prepare.outputs.version }}-mac-arm64.dmg" release/Soundslo-mac-arm64.dmg
-          cp "release/Soundslo-${{ needs.prepare.outputs.version }}-mac-x64.dmg" release/Soundslo-mac-x64.dmg
           cp "release/Soundslo-${{ needs.prepare.outputs.version }}-win-x64-setup.exe" release/Soundslo-win-x64-setup.exe
           cd release
           sha256sum * > SHA256SUMS.txt

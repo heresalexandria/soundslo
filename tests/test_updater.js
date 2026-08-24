@@ -11,12 +11,11 @@ assert.strictEqual(updater.isNewer('1.0.0', '1.0.1'), false);
 
 const assets = [
   { name: 'Soundslo-1.2.3-mac-arm64.zip' },
-  { name: 'Soundslo-1.2.3-mac-x64.zip' },
   { name: 'Soundslo-1.2.3-win-x64-setup.exe' },
 ];
 assert.strictEqual(updater.assetFor(assets, 'darwin', 'arm64').name, assets[0].name);
-assert.strictEqual(updater.assetFor(assets, 'darwin', 'x64').name, assets[1].name);
-assert.strictEqual(updater.assetFor(assets, 'win32', 'arm64').name, assets[2].name);
+assert.strictEqual(updater.assetFor(assets, 'darwin', 'x64'), null);
+assert.strictEqual(updater.assetFor(assets, 'win32', 'arm64').name, assets[1].name);
 assert.strictEqual(updater.assetFor(assets, 'linux', 'x64'), null);
 
 const digest = 'a'.repeat(64);

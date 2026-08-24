@@ -5,9 +5,9 @@ enforces this before merge.
 
 When a release-labeled pull request merges to `main`, `.github/workflows/release.yml`:
 
-1. increments `pyproject.toml`, `soundslo/__init__.py`, `app/package.json`, and the npm lockfile;
+1. increments `pyproject.toml`, `uv.lock`, `soundslo/__init__.py`, `app/package.json`, and the npm lockfile;
 2. commits the version bump to `main`;
-3. builds Apple-silicon macOS, Intel macOS, and Windows x64 on native runners;
+3. builds Apple-silicon macOS and Windows x64 on native runners;
 4. boots every unpacked application with `--smoke` to verify its embedded Python, backend source,
    service, and model catalog;
 5. publishes DMGs, macOS update ZIPs, the Windows NSIS installer, stable-name download aliases, and
