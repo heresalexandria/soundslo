@@ -23,9 +23,11 @@ models, the SQLite history, or WAV files.
 ## Native backends
 
 - `mac-arm64` bundles MLX and Stable Audio's MLX command for Metal acceleration.
-- `mac-x64` and `win-x64` bundle `ai_edge_litert` and the portable TFLite command.
+- `win-x64` bundles `ai_edge_litert` and the portable TFLite command.
 - TFLite uses `w16a32`: FP16 weights with FP32 activations. The upstream runtime describes this as
   approximately lossless compared with FP32 while cutting the download roughly in half.
+
+Intel macOS is not a release target because the official LiteRT package has no macOS x64 runtime.
 
 Generation commands invoke the backend Python entrypoint directly through the same bundled Python
 that runs the service. POSIX streams use a pseudo-terminal for progress; Windows uses a merged line

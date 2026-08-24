@@ -9,7 +9,6 @@
     "start": "electron .",
     "smoke": "electron . --smoke",
     "pack:mac": "python3 ../scripts/package/build.py --target mac-arm64",
-    "pack:mac-x64": "python3 ../scripts/package/build.py --target mac-x64",
     "pack:win": "python3 ../scripts/package/build.py --target win-x64"
   },
   "devDependencies": {

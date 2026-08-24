@@ -35,6 +35,7 @@ class Target:
     key: str
     pbs_triple: str
     python_rel: str
+    site_packages_rel: str
     backend: str
     eb_platform: str
     eb_arch: str
@@ -46,20 +47,29 @@ class Target:
 
 TARGETS = {
     "mac-arm64": Target(
-        "mac-arm64", "aarch64-apple-darwin", "bin/python3", "mlx", "--mac", "--arm64"
-    ),
-    "mac-x64": Target(
-        "mac-x64", "x86_64-apple-darwin", "bin/python3", "tflite", "--mac", "--x64"
+        "mac-arm64",
+        "aarch64-apple-darwin",
+        "bin/python3",
+        f"lib/python{PY_XY}/site-packages",
+        "mlx",
+        "--mac",
+        "--arm64",
     ),
     "win-x64": Target(
-        "win-x64", "x86_64-pc-windows-msvc", "python.exe", "tflite", "--win", "--x64"
+        "win-x64",
+        "x86_64-pc-windows-msvc",
+        "python.exe",
+        "Lib/site-packages",
+        "tflite",
+        "--win",
+        "--x64",
     ),
 }
 
 
 def host_target() -> str:
     if sys.platform == "darwin":
-        return "mac-arm64" if platform.machine() == "arm64" else "mac-x64"
+        return "mac-arm64" if platform.machine() == "arm64" else ""
     if sys.platform.startswith("win"):
         return "win-x64"
     return ""

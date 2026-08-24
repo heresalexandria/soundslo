@@ -25,7 +25,6 @@ latest stable installers:
 | Platform | Build | Local engine |
 |---|---|---|
 | macOS, Apple silicon | [DMG](https://github.com/heresalexandria/soundslo/releases/latest/download/Soundslo-mac-arm64.dmg) | MLX on the Metal GPU |
-| macOS, Intel | [DMG](https://github.com/heresalexandria/soundslo/releases/latest/download/Soundslo-mac-x64.dmg) | LiteRT/TFLite on CPU |
 | Windows 10/11, 64-bit | [Installer](https://github.com/heresalexandria/soundslo/releases/latest/download/Soundslo-win-x64-setup.exe) | LiteRT/TFLite on CPU |
 
 The desktop app bundles Electron, Python, Soundslo, and the correct Stable Audio runtime for its
@@ -35,8 +34,9 @@ the runtime, Hugging Face cache, generation history, and WAVs in its user-data d
 update does not erase them.
 
 Allow at least 8 GB free for first setup and temporary download space. The Apple-silicon MLX bundle
-is approximately 5.2 GB. Intel Mac and Windows use the approximately 4.5 GB, near-lossless
-`w16a32` LiteRT bundle. Generated WAVs use roughly 10 MB per minute.
+is approximately 5.2 GB. Windows uses the approximately 4.5 GB, near-lossless `w16a32` LiteRT
+bundle. Generated WAVs use roughly 10 MB per minute. Intel Macs are not supported because the
+official LiteRT runtime does not publish a macOS x64 build.
 
 The current downloads are unsigned. On macOS, Control-click the app and choose **Open**. On
 Windows, choose **More info**, then **Run anyway** in the SmartScreen prompt.
@@ -52,9 +52,9 @@ Windows, choose **More info**, then **Run anyway** in the SmartScreen prompt.
 - Automatic first-run runtime/model setup with resumable Hugging Face caching
 - Daily GitHub Release checks and checksum-verified, user-approved in-app updates
 
-Apple-silicon builds use Stability AI's native MLX implementation. Intel Mac and Windows builds use
-the official portable LiteRT/TFLite implementation with near-lossless FP16 weights and FP32
-activations. Both use the same pinned upstream runtime and model snapshot.
+Apple-silicon builds use Stability AI's native MLX implementation. Windows builds use the official
+portable LiteRT/TFLite implementation with near-lossless FP16 weights and FP32 activations. Both
+use the same pinned upstream runtime and model snapshot.
 
 ## Run from source
 
@@ -115,7 +115,6 @@ target platform:
 
 ```bash
 python scripts/package/build.py --target mac-arm64
-python scripts/package/build.py --target mac-x64
 python scripts/package/build.py --target win-x64
 ```
 
@@ -125,7 +124,7 @@ See [desktop architecture](docs/desktop.md), [updates](docs/updates.md), and
 ## Releases and updates
 
 Pull requests carry exactly one `major`, `minor`, `patch`, or `no-release` label. Merging a release
-PR bumps every version file, builds and smoke-tests all three native targets, publishes versioned
+PR bumps every version file, builds and smoke-tests both native targets, publishes versioned
 and stable-name assets plus `SHA256SUMS.txt`, and moves the rolling `latest` tag. GitHub Pages
 publishes the static download page from `site/`.
 
