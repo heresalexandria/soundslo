@@ -1,6 +1,6 @@
 [project]
 name = "soundslo"
-version = "0.2.0"
+version = "0.2.1"
 description = "A local-first Stable Audio 3 music workbench for macOS and Windows"
 readme = "README.md"
 license = "MIT"
