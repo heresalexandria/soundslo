@@ -77,6 +77,4 @@ jobs:
           mv .runtime/stable-audio-3-* .runtime/stable-audio-3
       - name: Boot the real Electron main process
         working-directory: app
-        env:
-          SOUNDSLO_PYTHON: ../.venv/bin/python
         run: npm run smoke
