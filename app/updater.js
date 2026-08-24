@@ -17,6 +17,7 @@ const REPO = 'heresalexandria/soundslo';
 const LATEST_URL = `https://api.github.com/repos/${REPO}/releases/latest`;
 const RELEASES_PAGE = `https://github.com/${REPO}/releases/latest`;
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const EXPECTED_MAC_TEAM_ID = 'KMZ785G889';
 const ALLOWED_HOSTS = [
   'api.github.com',
   'github.com',
@@ -238,7 +239,7 @@ function run(command, args) {
   return new Promise((resolve, reject) => {
     execFile(command, args, { maxBuffer: 8 << 20 }, (error, stdout, stderr) => {
       if (error) reject(new Error(String(stderr || error.message).slice(-1000)));
-      else resolve(stdout);
+      else resolve(`${stdout || ''}\n${stderr || ''}`);
     });
   });
 }
@@ -262,6 +263,13 @@ async function installMac(staged) {
     throw new Error('the update archive did not contain Soundslo.app');
   }
   await run('/usr/bin/codesign', ['--verify', '--deep', '--strict', fresh]);
+  const signature = await run('/usr/bin/codesign', ['-dvvv', fresh]);
+  if (!signature.includes('Authority=Developer ID Application:') ||
+      !signature.includes(`TeamIdentifier=${EXPECTED_MAC_TEAM_ID}`)) {
+    throw new Error('the update was not signed by the Soundslo Developer ID team');
+  }
+  await run('/usr/sbin/spctl', ['--assess', '--type', 'execute', '--verbose=4', fresh]);
+  await run('/usr/bin/xcrun', ['stapler', 'validate', fresh]);
   const script = path.join(downloadDir(), 'swap.sh');
   fs.writeFileSync(script, `#!/bin/sh
 set -u
@@ -326,5 +334,6 @@ module.exports = {
   assetFor,
   allowedUrl,
   checksumFor,
+  EXPECTED_MAC_TEAM_ID,
   CHECK_INTERVAL_MS,
 };

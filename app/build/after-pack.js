@@ -12,6 +12,7 @@ module.exports = async function afterPack(context) {
     try { fs.chmodSync(path.join(resources, relative), 0o755); } catch (_) {}
   }
   if (context.electronPlatformName !== 'darwin') return;
+  if (process.env.SOUNDSLO_ELECTRON_SIGN === 'true' || process.env.CSC_LINK) return;
   const appPath = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);
   execFileSync('codesign', ['--force', '--deep', '--sign', '-', appPath], { stdio: 'inherit' });
   execFileSync('codesign', ['--verify', '--verbose=2', appPath], { stdio: 'inherit' });

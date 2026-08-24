@@ -56,16 +56,47 @@ def ensure_node_modules() -> None:
         run([npm(), "ci", "--no-audit", "--no-fund"], cwd=APP_DIR)
 
 
-def package(target_key: str, *, directory_only: bool) -> None:
+def package_environment(
+    target_key: str, *, notarize: bool, source: dict[str, str] | None = None
+) -> dict[str, str]:
     target = TARGETS[target_key]
+    environment = dict(os.environ if source is None else source)
+    sign_macos = target.eb_platform == "--mac" and (
+        notarize
+        or environment.get("SOUNDSLO_ELECTRON_SIGN") == "true"
+        or bool(environment.get("CSC_LINK"))
+    )
+    if sign_macos:
+        environment["SOUNDSLO_ELECTRON_SIGN"] = "true"
+        environment.pop("CSC_IDENTITY_AUTO_DISCOVERY", None)
+        apple_credentials = any(
+            environment.get(name)
+            for name in ("APPLE_ID", "APPLE_API_KEY", "APPLE_KEYCHAIN_PROFILE")
+        )
+        if notarize and not apple_credentials:
+            environment["APPLE_KEYCHAIN_PROFILE"] = environment.get(
+                "SOUNDSLO_NOTARY_KEYCHAIN_PROFILE", "clawnsole-notarization"
+            )
+    else:
+        environment["CSC_IDENTITY_AUTO_DISCOVERY"] = "false"
+        environment.pop("CSC_LINK", None)
+        environment.pop("CSC_KEY_PASSWORD", None)
+    return environment
+
+
+def package(target_key: str, *, directory_only: bool, notarize: bool) -> None:
+    target = TARGETS[target_key]
+    if notarize and target.eb_platform != "--mac":
+        raise SystemExit("--notarize is available only for macOS targets")
     executable = APP_DIR / "node_modules" / ".bin" / (
         "electron-builder.cmd" if sys.platform.startswith("win") else "electron-builder"
     )
     command = [executable, target.eb_platform, target.eb_arch, "--publish", "never"]
     if directory_only:
         command.append("--dir")
-    environment = dict(os.environ)
-    environment.setdefault("CSC_IDENTITY_AUTO_DISCOVERY", "false")
+    if notarize:
+        command.append("--config.mac.notarize=true")
+    environment = package_environment(target_key, notarize=notarize)
     run(command, cwd=APP_DIR, env=environment)
 
 
@@ -77,6 +108,7 @@ def main() -> int:
     parser.add_argument("--force-sa3", action="store_true")
     parser.add_argument("--stage-only", action="store_true")
     parser.add_argument("--dir-only", action="store_true")
+    parser.add_argument("--notarize", action="store_true")
     args = parser.parse_args()
     if args.clean:
         for path in (CACHE_DIR, STAGE_DIR, APP_DIR / "dist"):
@@ -90,7 +122,7 @@ def main() -> int:
     log(f"staged Python {human(size_of(runtime))}; SA3 source {human(size_of(sa3))}")
     if not args.stage_only:
         ensure_node_modules()
-        package(args.target, directory_only=args.dir_only)
+        package(args.target, directory_only=args.dir_only, notarize=args.notarize)
     return 0
 
 

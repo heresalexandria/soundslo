@@ -93,12 +93,44 @@ jobs:
       - name: Install Electron dependencies
         working-directory: app
         run: npm ci --no-audit --no-fund
-      - name: Package native app
+      - name: Package signed and notarized macOS app
+        if: matrix.target == 'mac-arm64'
         shell: bash
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          EXPECTED_TEAM_ID: KMZ785G889
           PYTHONUTF8: '1'
-        run: python scripts/package/build.py --target "${{ matrix.target }}"
+        run: |
+          for value in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!value}" ]; then echo "::error::$value is required for signed and notarized macOS releases"; exit 1; fi
+          done
+          if [ "$APPLE_TEAM_ID" != "$EXPECTED_TEAM_ID" ]; then echo "::error::APPLE_TEAM_ID does not match Soundslo's Apple team"; exit 1; fi
+          python scripts/package/build.py --target mac-arm64 --notarize
+      - name: Package Windows app
+        if: matrix.target == 'win-x64'
+        shell: bash
+        env:
+          PYTHONUTF8: '1'
+        run: python scripts/package/build.py --target win-x64
+      - name: Verify macOS signature and notarization
+        if: matrix.target == 'mac-arm64'
+        shell: bash
+        env:
+          EXPECTED_TEAM_ID: KMZ785G889
+        run: |
+          app=$(find app/dist -path '*/Soundslo.app' -type d | head -1)
+          test -n "$app"
+          codesign --verify --deep --strict --verbose=4 "$app"
+          signature=$(codesign -dvvv "$app" 2>&1)
+          printf '%s\n' "$signature"
+          grep -F 'Authority=Developer ID Application:' <<< "$signature"
+          grep -F "TeamIdentifier=$EXPECTED_TEAM_ID" <<< "$signature"
+          spctl --assess --type execute --verbose=4 "$app"
+          xcrun stapler validate "$app"
       - name: Smoke test package
         shell: bash
         run: |
