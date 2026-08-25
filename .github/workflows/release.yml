@@ -4,12 +4,14 @@ on:
   pull_request:
     types: [closed]
     branches: [main]
+  repository_dispatch:
+    types: [release-prepared]
   workflow_dispatch:
     inputs:
       bump:
         description: Version bump
         type: choice
-        options: [patch, minor, major]
+        options: [current, patch, minor, major]
         default: patch
 
 permissions:
@@ -22,26 +24,53 @@ concurrency:
 jobs:
   prepare:
     name: bump version
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'repository_dispatch' ||
+      github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.bump.outputs.version }}
-      tag: ${{ steps.bump.outputs.tag }}
-      sha: ${{ steps.push.outputs.sha }}
+      version: ${{ steps.bump.outputs.version || steps.current.outputs.version }}
+      tag: ${{ steps.bump.outputs.tag || steps.current.outputs.tag }}
+      sha: ${{ steps.release.outputs.sha }}
       previous: ${{ steps.previous.outputs.tag }}
       skip: ${{ steps.kind.outputs.skip }}
+      pr: ${{ github.event.client_payload.pr || github.event.pull_request.number }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.sha || 'main' }}
           fetch-depth: 0
+      - name: Verify prepared release commit is on main
+        if: github.event_name == 'repository_dispatch'
+        env:
+          PREPARED_SHA: ${{ github.event.client_payload.sha }}
+        run: |
+          if [[ ! "$PREPARED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The prepared release SHA is invalid"
+            exit 1
+          fi
+          actual_sha="$(git rev-parse HEAD)"
+          if [ "$actual_sha" != "$PREPARED_SHA" ]; then
+            echo "::error::The checked-out commit does not match the prepared release"
+            exit 1
+          fi
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$actual_sha" FETCH_HEAD; then
+            echo "::error::The prepared release commit is not on main"
+            exit 1
+          fi
       - name: Select release kind
         id: kind
         env:
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
           DISPATCH: ${{ inputs.bump }}
+          PREPARED: ${{ github.event_name == 'repository_dispatch' }}
         run: |
-          if [ -n "$DISPATCH" ]; then kind="$DISPATCH"; else kind="$(python3 scripts/release/select_bump.py)"; fi
+          if [ "$PREPARED" = true ]; then kind=current
+          elif [ -n "$DISPATCH" ]; then kind="$DISPATCH"
+          else kind="$(python3 scripts/release/select_bump.py)"
+          fi
           echo "kind=$kind" >> "$GITHUB_OUTPUT"
           if [ "$kind" = none ]; then echo 'skip=true' >> "$GITHUB_OUTPUT"; else echo 'skip=false' >> "$GITHUB_OUTPUT"; fi
       - name: Find previous release
@@ -50,23 +79,55 @@ jobs:
         run: echo "tag=$(git tag --list 'v*' --sort=-v:refname | head -1)" >> "$GITHUB_OUTPUT"
       - name: Bump version
         id: bump
-        if: steps.kind.outputs.skip != 'true'
+        if: steps.kind.outputs.skip != 'true' && steps.kind.outputs.kind != 'current'
         run: python3 scripts/release/bump_version.py "${{ steps.kind.outputs.kind }}"
+      - name: Use current version
+        id: current
+        if: steps.kind.outputs.kind == 'current'
+        run: |
+          version="$(python3 scripts/release/bump_version.py --show)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
       - name: Commit and push version
         id: push
-        if: steps.kind.outputs.skip != 'true'
+        if: steps.kind.outputs.skip != 'true' && steps.kind.outputs.kind != 'current'
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add pyproject.toml uv.lock soundslo/__init__.py app/package.json app/package-lock.json
           git commit -m "Release ${{ steps.bump.outputs.tag }}"
           git push origin HEAD:main
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Select release commit
+        id: release
+        if: steps.kind.outputs.skip != 'true'
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  dispatch:
+    name: start trusted release builds
+    needs: prepare
+    if: github.event_name == 'pull_request' && needs.prepare.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch prepared commit from main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
+          PR: ${{ needs.prepare.outputs.pr }}
+        run: |
+          jq -n \
+            --arg sha "$RELEASE_SHA" \
+            --arg pr "$PR" \
+            '{event_type: "release-prepared", client_payload: {sha: $sha, pr: $pr}}' \
+            > "$RUNNER_TEMP/release-dispatch.json"
+          gh api \
+            --method POST \
+            "repos/$GITHUB_REPOSITORY/dispatches" \
+            --input "$RUNNER_TEMP/release-dispatch.json"
 
   build:
     name: build ${{ matrix.target }}
     needs: prepare
-    if: needs.prepare.outputs.skip != 'true'
+    if: github.event_name != 'pull_request' && needs.prepare.outputs.skip != 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -121,16 +182,8 @@ jobs:
         shell: bash
         env:
           EXPECTED_TEAM_ID: KMZ785G889
-        run: |
-          app=$(find app/dist -path '*/Soundslo.app' -type d | head -1)
-          test -n "$app"
-          codesign --verify --deep --strict --verbose=4 "$app"
-          signature=$(codesign -dvvv "$app" 2>&1)
-          printf '%s\n' "$signature"
-          grep -F 'Authority=Developer ID Application:' <<< "$signature"
-          grep -F "TeamIdentifier=$EXPECTED_TEAM_ID" <<< "$signature"
-          spctl --assess --type execute --verbose=4 "$app"
-          xcrun stapler validate "$app"
+          EXPECTED_VERSION: ${{ needs.prepare.outputs.version }}
+        run: scripts/package/verify_macos_artifacts.sh
       - name: Smoke test package
         shell: bash
         run: |
@@ -178,7 +231,7 @@ jobs:
       - name: Build release notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR: ${{ github.event.pull_request.number }}
+          PR: ${{ needs.prepare.outputs.pr }}
         run: |
           if [ -n "$PR" ]; then gh api "repos/${{ github.repository }}/pulls/$PR" > pr.json; fi
           python3 scripts/release/release_notes.py ${PR:+--pr pr.json} --version "${{ needs.prepare.outputs.version }}" --previous "${{ needs.prepare.outputs.previous }}" --repo "${{ github.repository }}" --files release --output notes.md

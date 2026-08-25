@@ -23,6 +23,7 @@ def test_release_contains_required_license_and_notice_files() -> None:
         ROOT / "soundslo" / "static" / "soundslo-icon.svg",
         ROOT / "scripts" / "install_model.sh",
         ROOT / "scripts" / "run_with_large.sh",
+        ROOT / "scripts" / "package" / "verify_macos_artifacts.sh",
         ROOT / "app" / "main.js",
         ROOT / "app" / "preload.js",
         ROOT / "app" / "updater.js",
@@ -73,6 +74,32 @@ def test_native_release_targets_match_supported_downloads() -> None:
     assert "mac-x64" not in download_page
     assert "Soundslo-mac-arm64.dmg" in download_page
     assert "Soundslo-win-x64-setup.exe" in download_page
+
+
+def test_release_signing_runs_from_a_trusted_main_commit() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+    assert "repository_dispatch:" in workflow
+    assert "types: [release-prepared]" in workflow
+    assert "Verify prepared release commit is on main" in workflow
+    assert "github.event_name != 'pull_request'" in workflow
+    assert "CSC_FOR_PULL_REQUEST" not in workflow
+
+
+def test_publishable_macos_artifacts_get_gatekeeper_verification() -> None:
+    release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+    build_check = (ROOT / ".github" / "workflows" / "build-check.yml").read_text()
+    verifier = (ROOT / "scripts" / "package" / "verify_macos_artifacts.sh").read_text()
+
+    assert "scripts/package/verify_macos_artifacts.sh" in release
+    assert "scripts/package/verify_macos_artifacts.sh" in build_check
+    assert "Soundslo-$version-mac-arm64.dmg" in verifier
+    assert "Soundslo-$version-mac-arm64.zip" in verifier
+    assert 'Authority=$expected_authority' in verifier
+    assert 'TeamIdentifier=$expected_team_id' in verifier
+    assert "spctl --assess --type execute" in verifier
+    assert "xcrun stapler validate" in verifier
+    assert "com.apple.quarantine" in verifier
+    assert 'verify_app "$verify_root/zip/Soundslo.app" "updater ZIP"' in verifier
 
 
 def test_every_release_version_source_agrees() -> None:
