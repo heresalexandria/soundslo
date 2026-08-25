@@ -20,8 +20,8 @@
         <span>soundslo</span>
       </a>
       <div class="topbar-status">
-        <button class="update-chip" id="update-chip" type="button" hidden>Update available</button>
         <button class="desktop-version" id="desktop-version" type="button" hidden></button>
+        <button class="update-chip" id="update-chip" type="button" aria-live="polite" hidden>Update Available</button>
         <div class="system-pill" id="system-pill">
           <span class="status-dot"></span>
           <span id="system-label">Checking local model…</span>
@@ -192,6 +192,13 @@
         <p class="section-number">SOUNDSLO DESKTOP</p>
         <h2 id="update-title">Software update</h2>
         <p class="update-status" id="update-status">Checking GitHub Releases…</p>
+        <section class="update-release" id="update-release" aria-labelledby="update-release-title" hidden>
+          <div class="update-release-heading">
+            <h3 id="update-release-title">Release notes</h3>
+            <a id="update-release-link" href="https://github.com/heresalexandria/soundslo/releases/latest" target="_blank" rel="noreferrer">View on GitHub</a>
+          </div>
+          <div class="update-release-notes" id="update-release-notes"></div>
+        </section>
         <div class="progress-track update-progress" id="update-progress" hidden>
           <div class="progress-fill" id="update-progress-fill"></div>
         </div>

@@ -1,5 +1,5 @@
 const MEDIUM_MODEL_ID = "stable-audio-3-medium";
-const UPDATE_POLL_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const UPDATE_POLL_INTERVAL_MS = 24 * 60 * 60 * 1000;
 if (window.location.protocol === "file:") {
   window.location.replace("http://127.0.0.1:8733/");
 }
@@ -315,6 +315,7 @@ function scheduleModelPolling() {
 }
 
 let desktopUpdate = null;
+let stagedDesktopUpdate = null;
 let updateBusy = false;
 
 async function initDesktop() {
@@ -331,26 +332,45 @@ async function initDesktop() {
     $("#update-status").textContent = `Downloading update… ${Math.round(fraction * 100)}%`;
   });
   const info = await desktop.updateInfo();
+  stagedDesktopUpdate = info.staged;
   window.setInterval(() => checkDesktopUpdate(false).catch(() => {}), UPDATE_POLL_INTERVAL_MS);
-  if (info.staged) {
-    desktopUpdate = { staged: info.staged };
-    showUpdateChip(`Install v${info.staged.version}`);
-    return;
-  }
-  if (info.stale) await checkDesktopUpdate(false);
+  // Match Clawnsole's update cadence: every launch asks GitHub afresh, while
+  // the persisted throttle applies only to later 24-hour background checks.
+  await checkDesktopUpdate(true);
 }
 
-function showUpdateChip(label) {
+function syncUpdateChip() {
   const chip = $("#update-chip");
-  chip.textContent = label;
-  chip.hidden = false;
+  const latest = stagedDesktopUpdate?.version ||
+    (desktopUpdate?.ok && desktopUpdate.available ? desktopUpdate.latest : null);
+  chip.hidden = !latest;
+  if (!latest) return;
+  chip.title = `Soundslo ${latest} is available`;
+  chip.setAttribute("aria-label", `Update Available. Soundslo ${latest} is ready.`);
 }
 
 async function checkDesktopUpdate(force = true) {
   const result = await window.soundsloDesktop.updateCheck({ force });
   desktopUpdate = result;
-  if (result.ok && result.available) showUpdateChip(`Update to v${result.latest}`);
+  if (stagedDesktopUpdate && result.ok &&
+      (!result.available || stagedDesktopUpdate.version !== result.latest)) {
+    // Never offer a previously staged build after GitHub has moved on to a
+    // newer release (or after the running app has caught up with it).
+    stagedDesktopUpdate = null;
+  }
+  syncUpdateChip();
   return result;
+}
+
+function renderReleaseNotes() {
+  const release = $("#update-release");
+  const available = desktopUpdate?.ok && desktopUpdate.available && desktopUpdate.latest;
+  release.hidden = !available;
+  if (!available) return;
+  $("#update-release-title").textContent = `What’s new in v${desktopUpdate.latest}`;
+  $("#update-release-notes").textContent = desktopUpdate.notes?.trim() ||
+    "No release notes were published for this version.";
+  $("#update-release-link").href = desktopUpdate.htmlUrl || desktopUpdate.releasesUrl;
 }
 
 function renderUpdateDialog() {
@@ -358,8 +378,9 @@ function renderUpdateDialog() {
   const action = $("#update-action");
   $("#update-progress").hidden = true;
   action.disabled = updateBusy;
-  if (desktopUpdate?.staged) {
-    status.textContent = `Version ${desktopUpdate.staged.version} is downloaded and checksum-verified.`;
+  renderReleaseNotes();
+  if (stagedDesktopUpdate) {
+    status.textContent = `Version ${stagedDesktopUpdate.version} is downloaded and checksum-verified.`;
     action.textContent = "Install and restart";
   } else if (desktopUpdate?.ok && desktopUpdate.available) {
     const size = desktopUpdate.asset?.size ? ` (${formatBytes(desktopUpdate.asset.size)})` : "";
@@ -391,15 +412,14 @@ $("#update-action").addEventListener("click", async () => {
   updateBusy = true;
   $("#update-action").disabled = true;
   try {
-    if (desktopUpdate?.staged) {
+    if (stagedDesktopUpdate) {
       $("#update-status").textContent = "Installing the verified update…";
       await window.soundsloDesktop.updateInstall();
       return;
     }
     if (desktopUpdate?.ok && desktopUpdate.available) {
-      const staged = await window.soundsloDesktop.updateDownload();
-      desktopUpdate = { staged };
-      showUpdateChip(`Install v${staged.version}`);
+      stagedDesktopUpdate = await window.soundsloDesktop.updateDownload();
+      syncUpdateChip();
     } else {
       $("#update-status").textContent = "Checking GitHub Releases…";
       desktopUpdate = await checkDesktopUpdate(true);

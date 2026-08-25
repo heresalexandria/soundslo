@@ -129,9 +129,10 @@ PR bumps every version file, builds and smoke-tests both native targets, publish
 and stable-name assets plus `SHA256SUMS.txt`, and moves the rolling `latest` tag. GitHub Pages
 publishes the static download page from `site/`.
 
-Packaged apps check GitHub Releases at most once per day. Updates never install silently: Soundslo
-shows the available version, downloads only after a click, verifies its SHA-256 digest, and asks the
-user to install and restart. Model data remains in user data and is not part of app replacement.
+Packaged apps check GitHub Releases on every launch and every 24 hours while running. Updates never
+install silently: Soundslo shows the available version and release notes, downloads only after a
+click, verifies its SHA-256 digest, and asks the user to install and restart. Model data remains in
+user data and is not part of app replacement.
 
 ## Licensing
 
