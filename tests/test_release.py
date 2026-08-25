@@ -75,6 +75,15 @@ def test_native_release_targets_match_supported_downloads() -> None:
     assert "Soundslo-win-x64-setup.exe" in download_page
 
 
+def test_release_signing_runs_from_a_trusted_main_commit() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+    assert "repository_dispatch:" in workflow
+    assert "types: [release-prepared]" in workflow
+    assert "Verify prepared release commit is on main" in workflow
+    assert "github.event_name != 'pull_request'" in workflow
+    assert "CSC_FOR_PULL_REQUEST" not in workflow
+
+
 def test_every_release_version_source_agrees() -> None:
     assert check() == __version__
 
