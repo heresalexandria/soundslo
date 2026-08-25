@@ -182,16 +182,8 @@ jobs:
         shell: bash
         env:
           EXPECTED_TEAM_ID: KMZ785G889
-        run: |
-          app=$(find app/dist -path '*/Soundslo.app' -type d | head -1)
-          test -n "$app"
-          codesign --verify --deep --strict --verbose=4 "$app"
-          signature=$(codesign -dvvv "$app" 2>&1)
-          printf '%s\n' "$signature"
-          grep -F 'Authority=Developer ID Application:' <<< "$signature"
-          grep -F "TeamIdentifier=$EXPECTED_TEAM_ID" <<< "$signature"
-          spctl --assess --type execute --verbose=4 "$app"
-          xcrun stapler validate "$app"
+          EXPECTED_VERSION: ${{ needs.prepare.outputs.version }}
+        run: scripts/package/verify_macos_artifacts.sh
       - name: Smoke test package
         shell: bash
         run: |
