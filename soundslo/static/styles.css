@@ -71,8 +71,28 @@ button { color: inherit; }
   letter-spacing: .05em;
 }
 
-.update-chip { color: var(--accent); border-color: #566036; }
-.update-chip:hover, .desktop-version:hover { border-color: #74765d; color: var(--ink); }
+.update-chip {
+  color: #fff;
+  border-color: rgba(255,255,255,.28);
+  background: linear-gradient(115deg, #2563eb, #8b5cf6, #312e81, #1d4ed8, #8b5cf6);
+  background-size: 260% 260%;
+  box-shadow: 0 0 14px rgba(109,40,217,.3);
+  font-weight: 700;
+  letter-spacing: .06em;
+  animation: update-chip-gradient 6s ease-in-out infinite, update-chip-glow 3s ease-in-out infinite;
+}
+.update-chip:hover { border-color: rgba(255,255,255,.58); color: #fff; filter: brightness(1.1); }
+.desktop-version:hover { border-color: #74765d; color: var(--ink); }
+
+@keyframes update-chip-gradient {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes update-chip-glow {
+  0%, 100% { box-shadow: 0 0 10px rgba(37,99,235,.25); }
+  50% { box-shadow: 0 0 18px rgba(139,92,246,.48); }
+}
 
 .brand {
   color: var(--ink);
@@ -433,6 +453,12 @@ dialog h2 { margin-bottom: 25px; }
 .log-dialog pre { max-height: 55vh; overflow: auto; background: #0e0e0d; border: 1px solid var(--line); padding: 15px; border-radius: 9px; color: #aaa99f; font: 11px/1.6 "DM Mono", monospace; white-space: pre-wrap; }
 .update-dialog { width: min(520px, calc(100% - 30px)); }
 .update-status { margin: -6px 0 0; color: var(--muted); line-height: 1.6; }
+.update-release { margin-top: 20px; border: 1px solid var(--line); border-radius: 11px; background: #10100f; overflow: hidden; }
+.update-release-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 13px 15px; border-bottom: 1px solid var(--line); }
+.update-release-heading h3 { margin: 0; font-size: 13px; letter-spacing: -.01em; }
+.update-release-heading a { flex: none; color: var(--muted); font: 9px "DM Mono", monospace; text-decoration: none; }
+.update-release-heading a:hover { color: var(--ink); }
+.update-release-notes { max-height: 240px; padding: 15px; overflow: auto; color: #bbb9b1; font: 11px/1.65 "DM Mono", monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .update-progress { margin-top: 18px; }
 
 .toast-region { position: fixed; z-index: 100; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 8px; }

@@ -116,6 +116,34 @@ function assetFor(assets, platform = process.platform, arch = process.arch) {
   return null;
 }
 
+function resultForRelease(release, {
+  current,
+  packaged,
+  platform = process.platform,
+  arch = process.arch,
+  checkedAt = Date.now(),
+} = {}) {
+  if (!release || release.draft || release.prerelease || !parseVersion(release.tag_name)) {
+    throw new Error('GitHub did not return a stable Soundslo release');
+  }
+  const runningVersion = current === undefined ? app.getVersion() : current;
+  const packagedBuild = packaged === undefined ? app.isPackaged : packaged;
+  const latest = String(release.tag_name).replace(/^v/, '');
+  const asset = assetFor(release.assets, platform, arch);
+  return {
+    ok: true,
+    current: runningVersion,
+    latest,
+    available: isNewer(latest, runningVersion),
+    installable: Boolean(packagedBuild && asset),
+    asset: asset ? { name: asset.name, size: asset.size || 0 } : null,
+    notes: String(release.body || '').slice(0, 12000),
+    htmlUrl: allowedUrl(release.html_url) ? release.html_url : RELEASES_PAGE,
+    releasesUrl: RELEASES_PAGE,
+    checkedAt,
+  };
+}
+
 let lastResult = null;
 let lastRelease = null;
 let inFlight = null;
@@ -138,27 +166,12 @@ async function check({ force = false } = {}) {
   }
   try {
     const release = JSON.parse(await text(LATEST_URL));
-    if (release.draft || release.prerelease || !parseVersion(release.tag_name)) {
-      throw new Error('GitHub did not return a stable Soundslo release');
-    }
     lastRelease = release;
-    const latest = String(release.tag_name).replace(/^v/, '');
+    lastResult = resultForRelease(release, { current, packaged: app.isPackaged });
     const asset = assetFor(release.assets);
-    lastResult = {
-      ok: true,
-      current,
-      latest,
-      available: isNewer(latest, current),
-      installable: Boolean(app.isPackaged && asset),
-      asset: asset ? { name: asset.name, size: asset.size || 0 } : null,
-      notes: String(release.body || '').slice(0, 12000),
-      htmlUrl: allowedUrl(release.html_url) ? release.html_url : RELEASES_PAGE,
-      releasesUrl: RELEASES_PAGE,
-      checkedAt: Date.now(),
-    };
     writeState({
       lastCheckAt: lastResult.checkedAt,
-      latest,
+      latest: lastResult.latest,
       hasAsset: Boolean(asset),
       assetName: asset ? asset.name : null,
       assetSize: asset ? asset.size || 0 : 0,
@@ -332,6 +345,7 @@ module.exports = {
   compareVersions,
   isNewer,
   assetFor,
+  resultForRelease,
   allowedUrl,
   checksumFor,
   EXPECTED_MAC_TEAM_ID,
