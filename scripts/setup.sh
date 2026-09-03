@@ -5,6 +5,14 @@ SOUNDSLO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOUNDSLO_RUNTIME="$SOUNDSLO_ROOT/.runtime/stable-audio-3"
 SOUNDSLO_MLX="$SOUNDSLO_RUNTIME/optimized/mlx"
 SOUNDSLO_SA3_REVISION="a0b57f5483c4588f827f3552b7d5c6ca2a9687be"
+SOUNDSLO_WITH_FOLEY=false
+
+if [[ "${1:-}" == "--with-foley-runtime" ]]; then
+  SOUNDSLO_WITH_FOLEY=true
+elif [[ -n "${1:-}" ]]; then
+  echo "Usage: $0 [--with-foley-runtime]" >&2
+  exit 2
+fi
 
 if ! command -v uv >/dev/null 2>&1; then
   echo "Installing uv with the official installer…"
@@ -40,6 +48,12 @@ echo "The model weights are governed by the Stability AI Community License, not 
 echo "T5Gemma is governed by the Gemma Terms of Use. See NOTICE and licenses/."
 "$SOUNDSLO_ROOT/scripts/install_model.sh" medium
 
+if [[ "$SOUNDSLO_WITH_FOLEY" == true ]]; then
+  echo "Setting up the optional Foley-Omni runtime (weights remain a separate install)…"
+  "$SOUNDSLO_ROOT/scripts/setup_foley.sh"
+fi
+
 echo
 echo "Soundslo is ready. Start it with:"
 echo "  $SOUNDSLO_ROOT/scripts/run.sh"
+echo "Optional Foley-Omni: scripts/setup_foley.sh && scripts/install_foley.sh"

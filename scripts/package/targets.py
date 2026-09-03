@@ -17,7 +17,9 @@ PBS_URL = (
 BASE_DEPS = (
     "fastapi>=0.116,<1",
     "httpx>=0.28,<1",
+    "imageio-ffmpeg>=0.6,<1",
     "pydantic>=2.11,<3",
+    "python-multipart>=0.0.20,<1",
     "uvicorn>=0.35,<1",
     "huggingface_hub>=0.20",
 )

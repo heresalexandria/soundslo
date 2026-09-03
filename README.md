@@ -1,8 +1,8 @@
 <div align="center">
   <img src="soundslo/static/soundslo-icon.svg" alt="Soundslo icon" width="104" height="104" />
   <h1>Soundslo</h1>
-  <p><em>Generate private, six-minute instrumental soundtracks from text on macOS or Windows.</em></p>
-  <p><strong>Powered by Stability AI.</strong></p>
+  <p><em>Generate private, local music and sound effects—and sync sound to video on Apple silicon.</em></p>
+  <p><strong>Powered by Stability AI and Foley-Omni.</strong></p>
 </div>
 
 <p align="center">
@@ -12,7 +12,9 @@
 Soundslo is a local-first music workbench for the **Stable Audio 3** family. Describe an
 instrumental in ordinary language, set its exact duration and generation controls, queue several
 takes, and keep a searchable library of WAV files. Medium is the default local model, Small Music
-is an optional lighter download, and Large remains an explicitly opt-in hosted model.
+is an optional lighter download, and Large remains an explicitly opt-in hosted model. On an
+Apple-silicon Mac, optional Foley-Omni support generates short sound effects from text or a
+synchronized soundtrack from a video clip.
 
 Soundslo is an independent project and is not affiliated with, sponsored by, or endorsed by
 Stability AI.
@@ -46,6 +48,7 @@ SmartScreen prompts.
 
 - Exact 1–380 second text-to-instrumental generation
 - Stable Audio 3 Medium and Small Music as local models, plus optional hosted Large
+- Optional Foley-Omni text-to-SFX and video-to-synchronized-soundtrack generation on Apple silicon
 - Negative prompting, guidance, sampling steps, exact duration, and reproducible seeds
 - A durable one-at-a-time queue with live stages and sampling progress
 - Persistent playback history, WAV downloads, rename, retry, cancel, prompt reuse, logs, and delete
@@ -83,10 +86,18 @@ The Settings panel can install or repair local model files. The equivalent sourc
 ```bash
 bash scripts/install_model.sh small-music
 bash scripts/install_model.sh medium
+bash scripts/setup_foley.sh
+bash scripts/install_foley.sh
 ```
 
 Hugging Face may require a free account, license acceptance, and `hf auth login`. Soundslo uses
 Hugging Face's own cache and credential store; it does not save tokens in this repository.
+
+Foley-Omni is an explicit, large optional install: it downloads about 40 GB, needs 36 GB free
+during conversion, settles at roughly 30 GB plus its 1.3 GB runtime, and requires at least 32 GB
+RAM. It generates 1–10 second, 16 kHz mono audio and can mux a generated track into an uploaded
+video. The current Apple CLIP and MMAudio-derived checkpoints restrict this stack to
+non-commercial research and personal experimentation; see Licensing below.
 
 ## Optional hosted Large
 
@@ -145,6 +156,10 @@ relicense Stable Audio 3, T5Gemma, downloaded model weights, or other third-part
   must follow its registration and revenue provisions.
 - T5Gemma weights remain governed by the [Gemma Terms of Use](licenses/GEMMA_TERMS_OF_USE.md).
 - Hosted Large use is governed by Stability AI's API terms, pricing, and acceptable-use policies.
+- Foley-Omni's Apple DFN5B checkpoint is research-only, and its MMAudio-derived checkpoints are
+  CC BY-NC 4.0. See the [Foley-Omni third-party terms](licenses/FOLEY_OMNI_THIRD_PARTY.md) and
+  [Apple model license](licenses/APPLE_ML_RESEARCH_MODEL_LICENSE.md). These dependencies are not
+  cleared for commercial use.
 
 Required attributions are retained in [NOTICE](NOTICE) and included with desktop packages. The
 complete installed stack is best described as an **open-source application using separately

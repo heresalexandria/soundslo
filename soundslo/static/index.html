@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#10100f" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; media-src 'self' blob:; style-src 'self'; script-src 'self'; connect-src 'self'" />
-    <title>Soundslo — Local music workbench</title>
+  <title>Soundslo — Local audio workbench</title>
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" sizes="any" />
     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
@@ -76,11 +76,21 @@
           </div>
 
           <label class="prompt-wrap">
-            <span class="sr-only">Music prompt</span>
+            <span class="sr-only">Audio prompt</span>
             <textarea id="prompt" name="prompt" rows="4" maxlength="2000" required
               placeholder="A widescreen 1960s science-fiction orchestral score, eerie strings, brass swells, analog electronic pulses, slow and ominous…"></textarea>
             <span class="char-count"><span id="char-count">0</span> / 2000</span>
           </label>
+
+          <div class="video-field" id="video-field" hidden>
+            <span>Optional video <small>MP4, MOV, WebM or M4V · first 10 seconds</small></span>
+            <label class="video-drop-zone" id="video-drop-zone">
+              <input id="video-input" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-m4v" />
+              <strong>Drop a video here</strong>
+              <small id="video-status">or choose a clip to generate synchronized sound</small>
+            </label>
+            <button class="video-clear" id="video-clear" type="button" hidden>Remove video</button>
+          </div>
 
           <div class="controls-grid">
             <div class="field duration-field">
@@ -127,7 +137,7 @@
               <label class="field">
                 <span>Sampling steps <output id="steps-output">8</output></span>
                 <input id="steps" type="range" min="4" max="16" value="8" step="1" />
-                <small>8 is the model's intended balance. More is exploratory, not always better.</small>
+                <small id="steps-note">8 is the model's intended balance. More is exploratory, not always better.</small>
               </label>
               <label class="field negative-field" id="negative-field">
                 <span>Negative prompt</span>

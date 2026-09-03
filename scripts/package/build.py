@@ -14,7 +14,7 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     __package__ = "scripts.package"
 
-from . import build_runtime, fetch_sa3  # noqa: E402
+from . import build_runtime, fetch_foley, fetch_sa3  # noqa: E402
 from .common import (  # noqa: E402
     APP_DIR,
     CACHE_DIR,
@@ -31,10 +31,16 @@ from .common import (  # noqa: E402
 from .targets import TARGETS  # noqa: E402
 
 
-def stage(runtime: Path, sa3: Path, target_key: str) -> None:
+def stage(runtime: Path, sa3: Path, foley: Path, target_key: str) -> None:
     STAGE_DIR.mkdir(parents=True, exist_ok=True)
     mirror(runtime, STAGE_DIR / "pyruntime")
     mirror(sa3, STAGE_DIR / "sa3-runtime")
+    mirror(foley, STAGE_DIR / "foley-runtime")
+    if target_key == "mac-arm64":
+        shutil.copy2(
+            REPO_ROOT / "requirements-foley.lock",
+            STAGE_DIR / "foley-runtime" / "requirements-foley.lock",
+        )
     legal = STAGE_DIR / "legal"
     rmtree(legal)
     legal.mkdir(parents=True)
@@ -45,6 +51,10 @@ def stage(runtime: Path, sa3: Path, target_key: str) -> None:
         "target": target_key,
         "runtime_bytes": size_of(runtime),
         "sa3_bytes": size_of(sa3),
+        "foley_bytes": size_of(foley),
+        "foley_revision": (foley / "REVISION").read_text().strip()
+        if (foley / "REVISION").is_file()
+        else None,
     }, indent=2))
 
 
@@ -106,6 +116,7 @@ def main() -> int:
     parser.add_argument("--clean", action="store_true")
     parser.add_argument("--force-runtime", action="store_true")
     parser.add_argument("--force-sa3", action="store_true")
+    parser.add_argument("--force-foley", action="store_true")
     parser.add_argument("--stage-only", action="store_true")
     parser.add_argument("--dir-only", action="store_true")
     parser.add_argument("--notarize", action="store_true")
@@ -118,8 +129,12 @@ def main() -> int:
     runtime = build_runtime.build(target, force=args.force_runtime)
     build_runtime.verify(target, runtime)
     sa3 = fetch_sa3.fetch(target, force=args.force_sa3)
-    stage(runtime, sa3, args.target)
-    log(f"staged Python {human(size_of(runtime))}; SA3 source {human(size_of(sa3))}")
+    foley = fetch_foley.fetch(target, force=args.force_foley)
+    stage(runtime, sa3, foley, args.target)
+    log(
+        f"staged Python {human(size_of(runtime))}; SA3 source {human(size_of(sa3))}; "
+        f"Foley source {human(size_of(foley))}"
+    )
     if not args.stage_only:
         ensure_node_modules()
         package(args.target, directory_only=args.dir_only, notarize=args.notarize)

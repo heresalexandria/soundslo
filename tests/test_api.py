@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from soundslo.app import create_app
 from soundslo.config import Settings
-from soundslo.models import LARGE_API_ID, MEDIUM_ID, SMALL_MUSIC_ID
+from soundslo.models import FOLEY_ID, LARGE_API_ID, MEDIUM_ID, SMALL_MUSIC_ID
 
 
 def test_generation_crud_and_audio(tmp_path: Path) -> None:
@@ -106,7 +106,7 @@ def test_model_catalog_is_transparent_without_exposing_credentials(tmp_path: Pat
         assert response.status_code == 200
         assert "super-secret-test-key" not in response.text
         models = {model["id"]: model for model in response.json()["models"]}
-        assert set(models) == {SMALL_MUSIC_ID, MEDIUM_ID, LARGE_API_ID}
+        assert set(models) == {SMALL_MUSIC_ID, MEDIUM_ID, LARGE_API_ID, FOLEY_ID}
         assert models[SMALL_MUSIC_ID]["max_duration_seconds"] == 120
         assert models[SMALL_MUSIC_ID]["download_bytes"] == 1_704_727_702
         assert models[MEDIUM_ID]["max_duration_seconds"] == 380

@@ -10,6 +10,7 @@ const updater = require('./updater');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const SA3_REVISION = 'a0b57f5483c4588f827f3552b7d5c6ca2a9687be';
+const FOLEY_REVISION = 'cf4dda1bb3c8f591a84db08f635233260581bb63';
 const PACKAGED = app.isPackaged;
 const SMOKE = process.argv.includes('--smoke');
 const BACKEND = process.platform === 'darwin' && process.arch === 'arm64' ? 'mlx' : 'tflite';
@@ -28,6 +29,12 @@ const RUNTIME_SOURCE = process.env.SOUNDSLO_SA3_ROOT || (PACKAGED
 const RUNTIME_DIR = PACKAGED
   ? path.join(USER_DATA, 'runtime', SA3_REVISION)
   : RUNTIME_SOURCE;
+const FOLEY_SOURCE = process.env.SOUNDSLO_FOLEY_ROOT || (PACKAGED
+  ? path.join(process.resourcesPath, 'foley-runtime')
+  : path.join(REPO_ROOT, '.runtime', 'foley-omni'));
+const FOLEY_DIR = PACKAGED
+  ? path.join(USER_DATA, 'runtime', 'foley-omni', FOLEY_REVISION)
+  : FOLEY_SOURCE;
 
 let mainWindow = null;
 let backendProcess = null;
@@ -41,6 +48,14 @@ function ensurePackagedRuntime() {
   }
   fs.mkdirSync(RUNTIME_DIR, { recursive: true });
   fs.cpSync(RUNTIME_SOURCE, RUNTIME_DIR, { recursive: true, force: true });
+  if (process.platform === 'darwin' && process.arch === 'arm64' && fs.existsSync(FOLEY_SOURCE)) {
+    fs.mkdirSync(FOLEY_DIR, { recursive: true });
+    fs.cpSync(FOLEY_SOURCE, FOLEY_DIR, {
+      recursive: true,
+      force: true,
+      filter: (source) => !['.venv', 'ckpts'].includes(path.basename(source)),
+    });
+  }
 }
 
 function freePort() {
@@ -62,6 +77,7 @@ function backendEnv() {
     SOUNDSLO_ROOT: PACKAGED ? process.resourcesPath : REPO_ROOT,
     SOUNDSLO_DATA_DIR: dataDir,
     SOUNDSLO_SA3_ROOT: RUNTIME_DIR,
+    SOUNDSLO_FOLEY_ROOT: FOLEY_DIR,
     SOUNDSLO_BACKEND: BACKEND,
     SOUNDSLO_RUNTIME_PYTHON: PYTHON,
     SOUNDSLO_TFLITE_PRECISION: 'w16a32',
@@ -197,7 +213,7 @@ async function runSmoke() {
       const check = () => {
         const models = document.querySelectorAll('#model-grid .model-card').length;
         const presets = document.querySelectorAll('#duration-presets button').length;
-        if (models === 3 && presets > 0) resolve(true);
+        if (models === 4 && presets > 0) resolve(true);
         else if (Date.now() >= deadline) resolve(false);
         else setTimeout(check, 100);
       };

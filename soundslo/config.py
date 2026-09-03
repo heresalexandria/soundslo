@@ -6,6 +6,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from soundslo.foley_models import FOLEY_RUNTIME_REVISION as FOLEY_RUNTIME_REVISION
+
 PACKAGE_ROOT = Path(__file__).resolve().parent
 ROOT = PACKAGE_ROOT.parent
 SA3_REVISION = "a0b57f5483c4588f827f3552b7d5c6ca2a9687be"
@@ -20,11 +22,17 @@ class Settings:
     generations_dir: Path
     sa3_root: Path
     static_dir: Path
+    foley_root: Path | None = None
     stability_api_key: str | None = None
     stability_api_base_url: str = "https://api.stability.ai"
     runtime_backend: str = "mlx"
     runtime_python_path: Path | None = None
+    foley_python_path: Path | None = None
     tflite_precision: str = "w16a32"
+
+    def __post_init__(self) -> None:
+        if self.foley_root is None:
+            object.__setattr__(self, "foley_root", self.root / ".runtime" / "foley-omni")
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -41,12 +49,18 @@ class Settings:
         if backend not in {"mlx", "tflite"}:
             raise ValueError("SOUNDSLO_BACKEND must be 'mlx' or 'tflite'.")
         runtime_python = os.environ.get("SOUNDSLO_RUNTIME_PYTHON")
+        foley_python = os.environ.get("SOUNDSLO_FOLEY_PYTHON")
         return cls(
             root=root,
             data_dir=data_dir,
             database_path=data_dir / "soundslo.sqlite3",
             generations_dir=data_dir / "generations",
             sa3_root=sa3_root,
+            foley_root=Path(
+                os.environ.get("SOUNDSLO_FOLEY_ROOT", root / ".runtime" / "foley-omni")
+            )
+            .expanduser()
+            .resolve(),
             static_dir=Path(os.environ.get("SOUNDSLO_STATIC_DIR", PACKAGE_ROOT / "static"))
             .expanduser()
             .resolve(),
@@ -57,6 +71,9 @@ class Settings:
             runtime_backend=backend,
             runtime_python_path=(
                 Path(runtime_python).expanduser().resolve() if runtime_python else None
+            ),
+            foley_python_path=(
+                Path(foley_python).expanduser().resolve() if foley_python else None
             ),
             tflite_precision=os.environ.get("SOUNDSLO_TFLITE_PRECISION", "w16a32"),
         )
@@ -90,6 +107,33 @@ class Settings:
     @property
     def runtime_installed(self) -> bool:
         return self.sa3_executable.is_file() and self.runtime_python.is_file()
+
+    @property
+    def foley_python(self) -> Path:
+        if self.foley_python_path:
+            return self.foley_python_path
+        assert self.foley_root is not None
+        posix = self.foley_root / ".venv" / "bin" / "python"
+        windows = self.foley_root / ".venv" / "Scripts" / "python.exe"
+        return windows if windows.is_file() else posix
+
+    @property
+    def foley_ckpts(self) -> Path:
+        assert self.foley_root is not None
+        return self.foley_root / "ckpts"
+
+    @property
+    def foley_worker(self) -> Path:
+        return PACKAGE_ROOT / "foley_worker.py"
+
+    @property
+    def foley_runtime_installed(self) -> bool:
+        assert self.foley_root is not None
+        return (self.foley_root / "inference_v2st.py").is_file() and self.foley_python.is_file()
+
+    @property
+    def foley_supported(self) -> bool:
+        return sys.platform == "darwin" and platform.machine() == "arm64"
 
     def ensure_directories(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)

@@ -36,6 +36,8 @@ class GenerationRunner:
 
     def command_for(self, generation: dict, output_path: Path) -> list[str]:
         spec = get_model(generation.get("model", MEDIUM_ID))
+        if spec.family == "foley-omni":
+            return self._foley_command(generation, output_path)
         if spec.deployment != "local" or not spec.dit or not spec.decoder:
             raise ValueError(f"{spec.name} does not use the local MLX command.")
         command = [
@@ -71,6 +73,51 @@ class GenerationRunner:
             command.extend(["--precision", self.settings.tflite_precision])
         return command
 
+    def _foley_command(self, generation: dict, output_path: Path) -> list[str]:
+        settings = self.settings
+        command = [
+            str(settings.foley_python),
+            str(settings.foley_worker),
+            "--runtime-root",
+            str(settings.foley_root),
+            "--ckpt-dir",
+            str(settings.foley_ckpts),
+            "--prompt",
+            generation["prompt"],
+            "--negative-prompt",
+            generation["negative_prompt"],
+            "--seconds",
+            str(generation["duration_seconds"]),
+            "--steps",
+            str(generation["steps"]),
+            "--seed",
+            str(generation["seed"]),
+            "--cfg",
+            str(generation["cfg_scale"]),
+            "--device",
+            "auto",
+            "--out",
+            str(output_path),
+        ]
+        if generation.get("input_path"):
+            command.extend(
+                [
+                    "--video",
+                    generation["input_path"],
+                    "--mux-out",
+                    str(output_path.with_suffix(".mp4")),
+                ]
+            )
+        if ram_gb() < 48:
+            command.append("--cpu-offload")
+        return command
+
+    def workdir_for(self, generation: dict) -> Path:
+        spec = get_model(generation.get("model", MEDIUM_ID))
+        if spec.family == "foley-omni":
+            return self.settings.foley_root
+        return self.settings.backend_root
+
     def run(
         self,
         generation: dict,
@@ -87,6 +134,11 @@ class GenerationRunner:
                 return 127, (
                     "Stable Audio 3 Large requires STABILITY_API_KEY. "
                     "Set it before starting Soundslo."
+                )
+            if spec.family == "foley-omni":
+                return 127, (
+                    "Foley-Omni is not ready on this computer. Its Apple-silicon runtime "
+                    "and model weights must both be installed."
                 )
             return 127, f"{spec.name} is not installed. Open Settings or run its install script."
         if model_id == LARGE_API_ID:
@@ -114,6 +166,7 @@ class GenerationRunner:
                 generation, output_path, on_output, on_progress, on_process
             )
 
+        family = get_model(generation.get("model", MEDIUM_ID)).family
         master_fd, slave_fd = pty.openpty()
         process: subprocess.Popen[bytes] | None = None
         captured: list[str] = []
@@ -121,7 +174,7 @@ class GenerationRunner:
         try:
             process = subprocess.Popen(
                 self.command_for(generation, output_path),
-                cwd=self.settings.backend_root,
+                cwd=self.workdir_for(generation),
                 stdin=subprocess.DEVNULL,
                 stdout=slave_fd,
                 stderr=slave_fd,
@@ -149,7 +202,7 @@ class GenerationRunner:
                             stripped = line.strip()
                             if stripped:
                                 on_output(stripped)
-                                progress = progress_from_line(stripped)
+                                progress = progress_from_line(stripped, family)
                                 if progress:
                                     on_progress(*progress)
                 if process.poll() is not None:
@@ -180,12 +233,13 @@ class GenerationRunner:
         on_process: Callable[[subprocess.Popen[bytes] | None], None],
     ) -> tuple[int, str]:
         captured: list[str] = []
+        family = get_model(generation.get("model", MEDIUM_ID)).family
         process: subprocess.Popen | None = None
         creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
         try:
             process = subprocess.Popen(
                 self.command_for(generation, output_path),
-                cwd=self.settings.backend_root,
+                cwd=self.workdir_for(generation),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -204,7 +258,7 @@ class GenerationRunner:
                     continue
                 captured.append(clean)
                 on_output(clean)
-                progress = progress_from_line(clean)
+                progress = progress_from_line(clean, family)
                 if progress:
                     on_progress(*progress)
             return process.wait(), "\n".join(captured)[-MAX_LOG_CHARS:]
@@ -284,21 +338,31 @@ class GenerationRunner:
             return 503, f"Could not reach the Stability API: {error}"
 
 
-def progress_from_line(line: str) -> tuple[float, str] | None:
+def progress_from_line(line: str, family: str = "sa3") -> tuple[float, str] | None:
     step_match = STEP_RE.search(line)
     if step_match:
         current, total = map(int, step_match.groups())
         return 35 + (current / max(total, 1)) * 35, f"Sampling — step {current} of {total}"
-    markers = (
-        ("downloading", 3, "Downloading model weights"),
-        ("SA3 → MLX", 8, "Starting Stable Audio 3"),
-        ("[1/5]", 18, "Encoding the prompt"),
-        ("[2/5]", 28, "Building conditioning"),
-        ("[3/5]", 35, "Loading and sampling the music model"),
-        ("[4/5]", 78, "Decoding audio"),
-        ("[5/5]", 95, "Writing the WAV file"),
-        ("saved", 99, "Finalizing"),
-    )
+    if family == "foley-omni":
+        markers = (
+            ("[1/5]", 18, "Loading Foley-Omni"),
+            ("[2/5]", 28, "Extracting video features"),
+            ("[3/5]", 35, "Sampling"),
+            ("[5/5]", 95, "Writing the WAV file"),
+            ("device:", 10, "Starting on Apple silicon"),
+            ("saved", 99, "Finalizing"),
+        )
+    else:
+        markers = (
+            ("downloading", 3, "Downloading model weights"),
+            ("SA3 → MLX", 8, "Starting Stable Audio 3"),
+            ("[1/5]", 18, "Encoding the prompt"),
+            ("[2/5]", 28, "Building conditioning"),
+            ("[3/5]", 35, "Loading and sampling the music model"),
+            ("[4/5]", 78, "Decoding audio"),
+            ("[5/5]", 95, "Writing the WAV file"),
+            ("saved", 99, "Finalizing"),
+        )
     lowered = line.lower()
     for marker, progress, stage in markers:
         if marker.lower() in lowered:
@@ -427,18 +491,25 @@ class JobManager:
             current = self.database.get(generation_id)
             if current and current["status"] == "cancelled":
                 output_path.unlink(missing_ok=True)
+                output_path.with_suffix(".mp4").unlink(missing_ok=True)
                 self.database.update(generation_id, elapsed_seconds=elapsed, log=raw_log)
             elif return_code == 0 and output_path.is_file():
+                completed = {
+                    "status": "completed",
+                    "progress": 100.0,
+                    "stage": "Ready",
+                    "file_path": str(output_path),
+                    "file_size": output_path.stat().st_size,
+                    "elapsed_seconds": elapsed,
+                    "error": None,
+                    "log": raw_log,
+                }
+                video_path = output_path.with_suffix(".mp4")
+                if video_path.is_file():
+                    completed["video_path"] = str(video_path)
                 self.database.update(
                     generation_id,
-                    status="completed",
-                    progress=100.0,
-                    stage="Ready",
-                    file_path=str(output_path),
-                    file_size=output_path.stat().st_size,
-                    elapsed_seconds=elapsed,
-                    error=None,
-                    log=raw_log,
+                    **completed,
                 )
             else:
                 message = _last_useful_line(raw_log or "\n".join(log_lines))
@@ -451,8 +522,10 @@ class JobManager:
                     log=raw_log,
                 )
                 output_path.unlink(missing_ok=True)
+                output_path.with_suffix(".mp4").unlink(missing_ok=True)
         except Exception as error:
             output_path.unlink(missing_ok=True)
+            output_path.with_suffix(".mp4").unlink(missing_ok=True)
             self.database.update(
                 generation_id,
                 status="failed",
@@ -465,6 +538,16 @@ class JobManager:
             with self._lock:
                 self._current_id = None
                 self._current_process = None
+
+
+def ram_gb() -> float:
+    """Return physical memory in GiB, or infinity when the OS cannot report it."""
+    try:
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        physical_pages = os.sysconf("SC_PHYS_PAGES")
+    except (AttributeError, OSError, ValueError):
+        return float("inf")
+    return page_size * physical_pages / 1024**3
 
 
 def _terminate_process(process: subprocess.Popen[bytes]) -> None:

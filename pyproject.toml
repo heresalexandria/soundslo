@@ -1,16 +1,18 @@
 [project]
 name = "soundslo"
 version = "0.2.3"
-description = "A local-first Stable Audio 3 music workbench for macOS and Windows"
+description = "A local-first music and sound-effects workbench for macOS and Windows"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE", "NOTICE", "licenses/*"]
 requires-python = ">=3.11"
-keywords = ["audio", "electron", "generative-ai", "mlx", "music", "stable-audio", "tflite"]
+keywords = ["audio", "electron", "foley", "generative-ai", "mlx", "music", "stable-audio", "tflite"]
 dependencies = [
   "fastapi>=0.116,<1",
   "httpx>=0.28,<1",
+  "imageio-ffmpeg>=0.6,<1",
   "pydantic>=2.11,<3",
+  "python-multipart>=0.0.20,<1",
   "uvicorn[standard]>=0.35,<1",
 ]
 

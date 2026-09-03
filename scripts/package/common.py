@@ -17,6 +17,7 @@ CACHE_DIR = REPO_ROOT / ".cache" / "package"
 DOWNLOAD_DIR = CACHE_DIR / "downloads"
 RUNTIME_CACHE = CACHE_DIR / "pyruntime"
 SA3_CACHE = CACHE_DIR / "sa3-runtime"
+FOLEY_CACHE = CACHE_DIR / "foley-runtime"
 STAGE_DIR = APP_DIR / "build-resources"
 _STARTED = time.monotonic()
 

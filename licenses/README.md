@@ -12,3 +12,13 @@ The upstream `NOTICE` requirements are retained in the repository-root `NOTICE` 
 
 These terms apply only to the identified third-party materials. They do not replace the MIT
 License that applies to Soundslo's original source code.
+
+The optional Foley-Omni integration has additional, more restrictive terms:
+
+- `APPLE_ML_RESEARCH_MODEL_LICENSE.md` is the license shipped with the pinned Apple DFN5B CLIP
+  checkpoint.
+- `FOLEY_OMNI_THIRD_PARTY.md` records the provenance and license boundaries of the Foley-Omni,
+  Wan2.2, MMAudio, and Apple model files.
+
+In particular, the Apple checkpoint is research-only and the MMAudio checkpoints are
+CC BY-NC 4.0. Do not treat the Foley-Omni model stack as cleared for commercial use.

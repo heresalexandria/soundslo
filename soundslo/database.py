@@ -17,7 +17,15 @@ MUTABLE_COLUMNS = {
     "error",
     "elapsed_seconds",
     "log",
+    "video_path",
 }
+
+GENERATION_COLUMNS = (
+    ("mode", "TEXT NOT NULL DEFAULT 'text'"),
+    ("input_path", "TEXT"),
+    ("sample_rate", "INTEGER NOT NULL DEFAULT 44100"),
+    ("video_path", "TEXT"),
+)
 
 
 def utc_now() -> str:
@@ -68,6 +76,12 @@ class Database:
                     ON generations(status);
                 """
             )
+            existing = {
+                row[1] for row in connection.execute("PRAGMA table_info(generations)")
+            }
+            for column, ddl in GENERATION_COLUMNS:
+                if column not in existing:
+                    connection.execute(f"ALTER TABLE generations ADD COLUMN {column} {ddl}")
 
     def create(self, values: dict[str, Any]) -> dict[str, Any]:
         now = utc_now()
@@ -130,9 +144,28 @@ class Database:
         row = self.get(generation_id)
         if row is None:
             return None
+        input_path = row.get("input_path")
         with self.connect() as connection:
             connection.execute("DELETE FROM generations WHERE id = ?", (generation_id,))
+            input_in_use = bool(
+                input_path
+                and connection.execute(
+                    "SELECT 1 FROM generations WHERE input_path = ? LIMIT 1", (input_path,)
+                ).fetchone()
+            )
+        video_path = row.get("video_path")
+        if video_path:
+            self._unlink_data_file(video_path)
+        if input_path and not input_in_use:
+            self._unlink_data_file(input_path)
         return row
+
+    def _unlink_data_file(self, raw_path: str) -> None:
+        """Remove a generation artifact only when it remains inside the data directory."""
+        path = Path(raw_path).resolve()
+        data_dir = self.path.resolve().parent
+        if path.is_relative_to(data_dir):
+            path.unlink(missing_ok=True)
 
     def fail_interrupted(self) -> None:
         now = utc_now()

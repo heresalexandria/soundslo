@@ -1,7 +1,7 @@
 {
   "name": "soundslo-app",
   "version": "0.2.3",
-  "description": "Soundslo — private Stable Audio music generation",
+  "description": "Soundslo — private music and sound-effects generation",
   "author": "Soundslo",
   "license": "MIT",
   "main": "main.js",
@@ -39,6 +39,10 @@
       {
         "from": "build-resources/sa3-runtime",
         "to": "sa3-runtime"
+      },
+      {
+        "from": "build-resources/foley-runtime",
+        "to": "foley-runtime"
       },
       {
         "from": "build-resources/legal",

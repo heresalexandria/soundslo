@@ -19,6 +19,10 @@ const state = {
   modelPollTimer: null,
   renameId: null,
   ready: false,
+  appliedModelId: null,
+  videoUpload: null,
+  uploadingVideo: false,
+  videoUploadToken: 0,
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -40,7 +44,8 @@ const promptIdeas = [
 ];
 
 async function api(path, options = {}) {
-  const headers = { ...(options.body ? { "Content-Type": "application/json" } : {}), ...options.headers };
+  const jsonBody = options.body && !(options.body instanceof FormData);
+  const headers = { ...(jsonBody ? { "Content-Type": "application/json" } : {}), ...options.headers };
   const response = await fetch(path, { ...options, headers });
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
@@ -98,6 +103,7 @@ function selectModel(modelId) {
     return;
   }
   state.selectedModelId = modelId;
+  clearVideo();
   try {
     window.localStorage.setItem("soundslo-model", modelId);
   } catch (_) {}
@@ -131,16 +137,28 @@ function applySelectedModel(system = null) {
     if (installation.state === "installing" && window.soundsloDesktop) {
       $("#settings-panel").open = true;
     }
-    $("#model-eyebrow").textContent = `STABLE AUDIO 3 ${model.short_name.toUpperCase()} · ON YOUR COMPUTER`;
-    $("#model-lede").textContent = "Instrumental scores generated privately on your computer.";
+    const isFoley = model.family === "foley-omni";
+    $("#model-eyebrow").textContent = isFoley
+      ? "FOLEY-OMNI · ON YOUR COMPUTER"
+      : `STABLE AUDIO 3 ${model.short_name.toUpperCase()} · ON YOUR COMPUTER`;
+    $("#model-lede").textContent = isFoley
+      ? "Sound effects and video soundtracks generated privately on your computer."
+      : "Instrumental scores generated privately on your computer.";
     $("#privacy-note").innerHTML = "<span>⌁</span> Audio never leaves this computer";
   }
+  const isFoley = model.family === "foley-omni";
+  promptInput.placeholder = isFoley
+    ? "Describe the sounds: footsteps on gravel, a door creaks, rain on a tin roof"
+    : "A widescreen 1960s science-fiction orchestral score, eerie strings, brass swells, analog electronic pulses, slow and ominous…";
+  $(".model-attribution").textContent = isFoley ? "Powered by NJU-Speech" : "Powered by Stability AI";
+  $("#generate-button span").textContent = isFoley ? "Generate sound" : "Generate music";
   pill.title = model.tradeoff;
   $("#settings-model-name").textContent = model.name;
   applyModelLimits(model);
 }
 
 function applyModelLimits(model) {
+  const modelChanged = state.appliedModelId !== model.id;
   const maximum = model.max_duration_seconds;
   durationInput.max = maximum;
   durationMinutes.max = Math.floor(maximum / 60);
@@ -150,17 +168,29 @@ function applyModelLimits(model) {
   renderDurationPresets();
 
   const stepInput = $("#steps");
-  stepInput.max = Math.min(model.max_steps, 16);
-  if (Number(stepInput.value) > Number(stepInput.max)) stepInput.value = stepInput.max;
+  stepInput.min = model.family === "foley-omni" ? 10 : 4;
+  stepInput.max = model.max_steps;
+  $("#steps-note").textContent = `${model.default_steps} is this model's intended balance. More is exploratory, not always better.`;
+  if (modelChanged) {
+    stepInput.value = model.default_steps;
+    $("#guidance").value = model.default_cfg_scale ?? 3;
+    $("#negative-prompt").value = model.default_negative_prompt || "";
+  } else if (Number(stepInput.value) > Number(stepInput.max)) {
+    stepInput.value = stepInput.max;
+  }
 
   const negative = $("#negative-prompt");
   negative.disabled = !model.supports_negative_prompt;
   $("#negative-field").classList.toggle("disabled", !model.supports_negative_prompt);
   $("#negative-prompt-note").textContent = model.supports_negative_prompt
-    ? "Used when guidance is above 1. The default steers away from voices."
+    ? model.family === "foley-omni"
+      ? "Describe artifacts or qualities the soundtrack should avoid."
+      : "Used when guidance is above 1. The default steers away from voices."
     : "The hosted Large API does not expose negative prompting. Put “instrumental, no vocals” in the main prompt.";
+  $("#video-field").hidden = !model.accepts_video;
   $("#seed").min = model.deployment === "cloud" ? 1 : 0;
   $("#seed").max = model.deployment === "cloud" ? 4294967294 : 4294967295;
+  state.appliedModelId = model.id;
   updateControls();
 }
 
@@ -200,6 +230,11 @@ function modelCard(model) {
   addFact(facts, "Max length", formatDuration(model.max_duration_seconds));
   addFact(facts, model.deployment === "local" ? "Weight download" : "Local download", model.download_bytes ? formatModelBytes(model.download_bytes) : "None");
   addFact(facts, "Negative prompt", model.supports_negative_prompt ? "Supported" : "Not exposed");
+  if (model.accepts_video) {
+    addFact(facts, "Input", "Text or video ≤ 10 s");
+    addFact(facts, "Output", "16 kHz mono");
+    addFact(facts, "Needs", `${model.min_ram_gb || 32} GB RAM · ~30 GB disk`);
+  }
   addFact(
     facts,
     model.deployment === "local" ? "Runs" : "Cost",
@@ -237,7 +272,9 @@ function modelCard(model) {
 
   const credential = document.createElement("p");
   credential.className = "model-credential";
-  credential.textContent = model.credential_note;
+  credential.textContent = model.supported === false
+    ? model.support_reason || model.unsupported_reason || "This model is not supported on this computer."
+    : model.credential_note;
   if (model.deployment === "cloud" && !model.ready) {
     const command = document.createElement("code");
     command.textContent = "STABILITY_API_KEY=… ./scripts/run.sh";
@@ -252,8 +289,10 @@ function modelCard(model) {
     installButton.className = "ghost-button";
     installButton.dataset.modelAction = "install";
     installButton.dataset.modelId = model.id;
-    installButton.disabled = !model.runtime_installed;
-    installButton.textContent = model.runtime_installed
+    installButton.disabled = model.supported === false || (model.family !== "foley-omni" && !model.runtime_installed);
+    installButton.textContent = model.supported === false
+      ? "Not supported"
+      : model.runtime_installed || model.family === "foley-omni"
       ? `Install ${formatModelBytes(model.download_bytes)}`
       : "Run setup first";
     actions.append(installButton);
@@ -443,6 +482,8 @@ function renderGenerations() {
       generation.stage,
       generation.error,
       generation.file_size,
+      generation.video_path,
+      generation.sample_rate,
     ].join("|");
     let card = list.querySelector(`[data-id="${generation.id}"]`);
     if (!card || card.dataset.version !== version) {
@@ -467,6 +508,8 @@ function generationCard(generation) {
     generation.stage,
     generation.error,
     generation.file_size,
+    generation.video_path,
+    generation.sample_rate,
   ].join("|");
 
   const cover = document.createElement("div");
@@ -485,6 +528,8 @@ function generationCard(generation) {
   badge.className = `status-badge ${generation.status}`;
   badge.textContent = generation.status;
   titleRow.append(title, badge);
+  if (generation.sample_rate === 16000) addPill(titleRow, "16 kHz");
+  if (generation.video_path) addPill(titleRow, "video");
 
   const meta = document.createElement("p");
   meta.className = "generation-meta";
@@ -533,6 +578,9 @@ function generationCard(generation) {
   addAction(actions, "Prompt", "reuse", generation.id, "Load these settings into the composer");
   if (generation.status === "completed") {
     addLink(actions, "Download", `/api/generations/${generation.id}/download`);
+    if (generation.video_path) {
+      addLink(actions, "Open MP4", `/api/generations/${generation.id}/video`, false);
+    }
     addAction(actions, "Show file", "reveal", generation.id, "Reveal WAV in the file manager");
   }
   if (["queued", "running"].includes(generation.status)) {
@@ -559,12 +607,19 @@ function addAction(root, label, action, id, title = "", className = "") {
   root.append(button);
 }
 
-function addLink(root, label, href) {
+function addLink(root, label, href, download = true) {
   const link = document.createElement("a");
   link.href = href;
   link.textContent = label;
-  link.setAttribute("download", "");
+  if (download) link.setAttribute("download", "");
   root.append(link);
+}
+
+function addPill(root, label) {
+  const pill = document.createElement("span");
+  pill.className = "format-pill";
+  pill.textContent = label;
+  root.append(pill);
 }
 
 function queuedLabel(generation) {
@@ -584,6 +639,10 @@ function schedulePolling() {
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const model = selectedModel();
+  if (state.uploadingVideo) {
+    toast("Wait for the video upload to finish before generating.", true);
+    return;
+  }
   if (!state.ready) {
     $("#settings-panel").open = true;
     $("#settings-panel").scrollIntoView({ behavior: "smooth", block: "center" });
@@ -605,6 +664,7 @@ form.addEventListener("submit", async (event) => {
         seed: seedValue ? Number(seedValue) : null,
         steps: Number($("#steps").value),
         cfg_scale: Number($("#guidance").value),
+        video_id: state.videoUpload?.id || null,
       }),
     });
     state.generations.unshift(generation);
@@ -616,7 +676,7 @@ form.addEventListener("submit", async (event) => {
     toast(error.message, true);
   } finally {
     button.disabled = false;
-    button.querySelector("span").textContent = "Generate music";
+    button.querySelector("span").textContent = model?.family === "foley-omni" ? "Generate sound" : "Generate music";
   }
 });
 
@@ -632,6 +692,7 @@ list.addEventListener("click", async (event) => {
       const originalModel = modelById(generation.model);
       if (originalModel?.ready) selectModel(originalModel.id);
       else if (generation.model) toast("That generation's model is not currently ready; keeping the current model.", true);
+      clearVideo();
       promptInput.value = generation.prompt;
       $("#negative-prompt").value = generation.negative_prompt;
       setDuration(generation.duration_seconds);
@@ -721,6 +782,70 @@ $("#duration-presets").addEventListener("click", (event) => {
   if (button) setDuration(button.dataset.duration);
 });
 
+const videoInput = $("#video-input");
+const videoDropZone = $("#video-drop-zone");
+videoInput.addEventListener("change", () => uploadVideo(videoInput.files?.[0]));
+videoDropZone.addEventListener("dragover", (event) => {
+  event.preventDefault();
+  videoDropZone.classList.add("dragging");
+});
+videoDropZone.addEventListener("dragleave", () => videoDropZone.classList.remove("dragging"));
+videoDropZone.addEventListener("drop", (event) => {
+  event.preventDefault();
+  videoDropZone.classList.remove("dragging");
+  uploadVideo(event.dataTransfer?.files?.[0]);
+});
+$("#video-clear").addEventListener("click", clearVideo);
+
+async function uploadVideo(file) {
+  if (!file || state.uploadingVideo) return;
+  const token = ++state.videoUploadToken;
+  state.uploadingVideo = true;
+  state.videoUpload = null;
+  $("#video-status").textContent = `Uploading ${file.name}…`;
+  $("#video-clear").hidden = true;
+  try {
+    const body = new FormData();
+    body.append("file", file);
+    const upload = await api("/api/uploads", { method: "POST", body });
+    if (token !== state.videoUploadToken) return;
+    state.videoUpload = upload;
+    const used = Math.min(upload.duration_seconds, 10);
+    setDuration(used);
+    lockDuration(true);
+    $("#video-status").textContent = `${file.name} · ${formatDuration(upload.duration_seconds)} · soundtrack ${formatDuration(used)}`;
+    $("#video-clear").hidden = false;
+  } catch (error) {
+    if (token === state.videoUploadToken) {
+      clearVideo();
+      toast(error.message, true);
+    }
+  } finally {
+    if (token === state.videoUploadToken) state.uploadingVideo = false;
+  }
+}
+
+function lockDuration(locked) {
+  durationInput.disabled = locked;
+  durationMinutes.disabled = locked;
+  durationSeconds.disabled = locked;
+  $(".duration-slider-panel").classList.toggle("disabled", locked);
+  $("#duration-presets").classList.toggle("disabled", locked);
+  $("#duration-note").textContent = locked
+    ? "Duration follows the uploaded video (up to 10 seconds)."
+    : `${selectedModel()?.short_name || "This model"} supports exact lengths up to ${formatDuration(selectedModel()?.max_duration_seconds || 380)}.`;
+}
+
+function clearVideo() {
+  state.videoUploadToken += 1;
+  state.uploadingVideo = false;
+  state.videoUpload = null;
+  videoInput.value = "";
+  $("#video-status").textContent = "or choose a clip to generate synchronized sound";
+  $("#video-clear").hidden = true;
+  lockDuration(false);
+}
+
 function currentDuration() {
   return Math.max(1, Math.round(Number(durationInput.value) || 1));
 }
@@ -750,7 +875,10 @@ function setDuration(seconds) {
 function renderDurationPresets() {
   const model = selectedModel();
   const maximum = model?.max_duration_seconds || 380;
-  const values = [...new Set([30, 60, 120, 180, 360, maximum].filter((value) => value <= maximum))];
+  const candidates = model?.family === "foley-omni"
+    ? [2, 4, 6, 8, 10]
+    : [30, 60, 120, 180, 360, maximum];
+  const values = [...new Set(candidates.filter((value) => value <= maximum))];
   const buttons = values.map((value) => {
     const button = document.createElement("button");
     button.type = "button";

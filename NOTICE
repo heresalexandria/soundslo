@@ -14,3 +14,11 @@ ai.google.dev/gemma/terms
 
 Soundslo is an independent project and is not affiliated with, sponsored by, or
 endorsed by Stability AI or Google.
+
+The optional Foley-Omni integration downloads model files separately. Foley-Omni identifies its
+code and primary checkpoint as MIT licensed. The Wan2.2 umT5-XXL files identify their license as
+Apache-2.0. The three MMAudio-derived checkpoint files are offered by MMAudio under CC BY-NC 4.0.
+The Apple DFN5B CLIP checkpoint is licensed only for non-commercial research under the Apple
+Machine Learning Research Model License Agreement. See licenses/FOLEY_OMNI_THIRD_PARTY.md and
+licenses/APPLE_ML_RESEARCH_MODEL_LICENSE.md. These restrictions are a commercial-release blocker
+for the current Foley-Omni stack.
